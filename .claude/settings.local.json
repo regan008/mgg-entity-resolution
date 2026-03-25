@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip3 install:*)",
+      "Bash(python3 preprocess.py WY)",
+      "Bash(python3 block.py WY)",
+      "Bash(python3 score.py WY)",
+      "Bash(python3 adjudicate.py WY --skip-ai)",
+      "Bash(python3:*)"
+    ]
+  }
+}
