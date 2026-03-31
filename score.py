@@ -53,8 +53,16 @@ def token_set_overlap(addr_a: str, addr_b: str) -> float:
 
 
 def composite_score(embedding_sim: float, jw_sim: float,
-                    token_overlap: float) -> float:
-    """Weighted composite similarity score."""
+                    token_overlap: float,
+                    addr_missing: bool = False) -> float:
+    """Weighted composite similarity score.
+
+    When either/both addresses are missing, redistributes the address
+    weight proportionally to embedding and JW (maintaining 2:1 ratio).
+    """
+    if addr_missing:
+        return (config.WEIGHT_EMBEDDING_NO_ADDR * embedding_sim
+                + config.WEIGHT_JARO_WINKLER_NO_ADDR * jw_sim)
     return (config.WEIGHT_EMBEDDING * embedding_sim
             + config.WEIGHT_JARO_WINKLER * jw_sim
             + config.WEIGHT_TOKEN_OVERLAP * token_overlap)
@@ -142,12 +150,14 @@ def score_state(state: str) -> pd.DataFrame:
         )
 
         # Token overlap on addresses
-        tok_overlap = token_set_overlap(
-            str(rec_a["norm_address"]),
-            str(rec_b["norm_address"]),
-        )
+        addr_a = str(rec_a["norm_address"])
+        addr_b = str(rec_b["norm_address"])
+        tok_overlap = token_set_overlap(addr_a, addr_b)
 
-        comp = composite_score(emb_sim, jw_sim, tok_overlap)
+        # Adaptive weighting: redistribute address weight when missing
+        addr_missing = (not addr_a.strip()) or (not addr_b.strip())
+        comp = composite_score(emb_sim, jw_sim, tok_overlap,
+                               addr_missing=addr_missing)
 
         results.append({
             "id_a": id_a,

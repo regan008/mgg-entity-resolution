@@ -6,7 +6,11 @@
       "Bash(python3 block.py WY)",
       "Bash(python3 score.py WY)",
       "Bash(python3 adjudicate.py WY --skip-ai)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(ls /Users/amandaregan/Desktop/mgg-entity-resolution/*.py)",
+      "Bash(ls /Users/amandaregan/Desktop/mgg-entity-resolution/*.md)",
+      "Bash(pip install:*)",
+      "Bash(curl -s http://localhost:5001/api/pair/0)"
     ]
   }
 }

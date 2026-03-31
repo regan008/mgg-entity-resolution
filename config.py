@@ -79,6 +79,10 @@ WEIGHT_EMBEDDING = 0.50
 WEIGHT_JARO_WINKLER = 0.25
 WEIGHT_TOKEN_OVERLAP = 0.25
 
+# Adaptive weights when address is missing (redistributed, maintaining 2:1 ratio)
+WEIGHT_EMBEDDING_NO_ADDR = 2 / 3
+WEIGHT_JARO_WINKLER_NO_ADDR = 1 / 3
+
 # ── Adjudication ───────────────────────────────────────────────────────────
 AUTO_MATCH_THRESHOLD = 0.75
 AUTO_REJECT_THRESHOLD = 0.50
@@ -90,6 +94,12 @@ EDGE_CASE_HIGH_ADDR_LOW_NAME_ADDR = 0.7  # Token overlap above this
 EDGE_CASE_HIGH_ADDR_LOW_NAME_NAME = 0.5  # Jaro-Winkler below this
 EDGE_CASE_HIGH_NAME_LOW_ADDR_NAME = 0.8  # Jaro-Winkler above this
 EDGE_CASE_HIGH_NAME_LOW_ADDR_ADDR = 0.3  # Token overlap below this
+
+# Signal disagreement: high embedding but low name → route to manual review
+# Catches semantic false positives (e.g., "Cowboy Bar" vs "Rancher Bar")
+SIGNAL_DISAGREE_EMB_MIN = 0.60     # Embedding similarity at or above this
+SIGNAL_DISAGREE_JW_MAX = 0.55      # Jaro-Winkler below this
+SIGNAL_DISAGREE_ADDR_MAX = 0.50    # No strong address corroboration either
 
 # ── Consolidation ──────────────────────────────────────────────────────────
 MAX_GROUP_DISTANCE_KM = 50

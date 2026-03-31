@@ -2,13 +2,22 @@
 Stage 4: Tiered Decision-Making
 
 Applies tiered logic to scored pairs:
-  - Auto-match: composite_score >= 0.85
-  - AI adjudication: 0.50 <= composite_score < 0.85 (sent to Claude)
+  - Auto-match: composite_score >= 0.75
+  - AI adjudication: 0.50 <= composite_score < 0.75 (sent to Claude)
   - Auto-reject: composite_score < 0.50
 
 Also detects edge cases:
   - High address overlap + low name similarity (possible name change)
   - High name similarity + low address overlap (possible relocation)
+  - Signal disagreement: high embedding but low name similarity
+    (semantic false positives like "Cowboy Bar" vs "Rancher Bar")
+
+Human review workflow:
+  - Signal disagreement pairs are sent through AI adjudication but
+    flagged with needs_human_review=True for manual confirmation.
+  - All AI-adjudicated pairs are also flagged for human review.
+  - A separate human_review_pairs.csv is saved with AI decisions +
+    rationale so the reviewer can confirm or override.
 """
 import json
 import os
@@ -23,13 +32,18 @@ import config
 logger = logging.getLogger(__name__)
 
 
-def detect_edge_case(row: pd.Series) -> str:
+def detect_edge_case(row: pd.Series, has_na_title: bool = False) -> str:
     """
     Detect edge cases that need manual review regardless of decision tier.
     Returns edge case type string or empty string.
+
+    Args:
+        row: Scored pair with similarity columns.
+        has_na_title: True if either record in the pair has an NA title.
     """
     jw = row["jw_name_sim"]
     tok = row["token_addr_overlap"]
+    emb = row["embedding_sim"]
 
     if tok >= config.EDGE_CASE_HIGH_ADDR_LOW_NAME_ADDR and \
        jw < config.EDGE_CASE_HIGH_ADDR_LOW_NAME_NAME:
@@ -38,6 +52,16 @@ def detect_edge_case(row: pd.Series) -> str:
     if jw >= config.EDGE_CASE_HIGH_NAME_LOW_ADDR_NAME and \
        tok < config.EDGE_CASE_HIGH_NAME_LOW_ADDR_ADDR:
         return "high_name_low_addr"
+
+    # Signal disagreement: embedding sees similarity but names clearly differ.
+    # Catches semantic false positives like "Cowboy Bar" vs "Rancher Bar".
+    # Only applies when both records have proper titles — NA-title records
+    # naturally have low JW scores due to description-based matching.
+    if not has_na_title and \
+       emb >= config.SIGNAL_DISAGREE_EMB_MIN and \
+       jw < config.SIGNAL_DISAGREE_JW_MAX and \
+       tok < config.SIGNAL_DISAGREE_ADDR_MAX:
+        return "signal_disagreement"
 
     return ""
 
@@ -170,7 +194,20 @@ def adjudicate_state(state: str, skip_ai: bool = False) -> pd.DataFrame:
     scored_df["method"] = ""
     scored_df["ai_confidence"] = None
     scored_df["ai_rationale"] = ""
-    scored_df["edge_case"] = scored_df.apply(detect_edge_case, axis=1)
+    scored_df["needs_human_review"] = False
+    scored_df["human_review_reason"] = ""
+    # Pre-compute NA-title flag for each pair
+    def _has_na_title(row):
+        id_a, id_b = int(row["id_a"]), int(row["id_b"])
+        return bool(records_lookup.loc[id_a, "is_na_title"]) or \
+               bool(records_lookup.loc[id_b, "is_na_title"])
+
+    scored_df["_has_na_title"] = scored_df.apply(_has_na_title, axis=1)
+    scored_df["edge_case"] = scored_df.apply(
+        lambda row: detect_edge_case(row, has_na_title=row["_has_na_title"]),
+        axis=1,
+    )
+    scored_df.drop(columns=["_has_na_title"], inplace=True)
 
     # Auto-match
     auto_match_mask = scored_df["composite_score"] >= config.AUTO_MATCH_THRESHOLD
@@ -182,14 +219,24 @@ def adjudicate_state(state: str, skip_ai: bool = False) -> pd.DataFrame:
     scored_df.loc[auto_reject_mask, "decision"] = "reject"
     scored_df.loc[auto_reject_mask, "method"] = "auto_reject"
 
-    # AI adjudication range
+    # Signal disagreement: flag for human review but let AI adjudicate first.
+    # These are pairs where embedding sees similarity but names clearly differ
+    # (e.g., "Cowboy Bar" vs "Rancher Bar"). AI takes a first pass, then
+    # the human reviewer confirms or overrides.
+    signal_disagree_mask = scored_df["edge_case"] == "signal_disagreement"
+    scored_df.loc[signal_disagree_mask, "needs_human_review"] = True
+    scored_df.loc[signal_disagree_mask, "human_review_reason"] = \
+        "signal_disagreement: high embedding similarity but low name match"
+
+    # AI adjudication range (signal disagreement pairs ARE included for AI review)
     ai_mask = (~auto_match_mask) & (~auto_reject_mask)
     ai_pairs = scored_df[ai_mask]
 
     logger.info(
         f"State={state}: auto-match={auto_match_mask.sum()}, "
         f"AI range={len(ai_pairs)}, auto-reject={auto_reject_mask.sum()}, "
-        f"edge cases={(scored_df['edge_case'] != '').sum()}"
+        f"flagged for human review={signal_disagree_mask.sum()}, "
+        f"other edge cases={(scored_df['edge_case'].isin(['high_addr_low_name', 'high_name_low_addr'])).sum()}"
     )
 
     if skip_ai or ai_pairs.empty:
@@ -269,6 +316,14 @@ def adjudicate_state(state: str, skip_ai: bool = False) -> pd.DataFrame:
                     scored_df.loc[idx, "decision"] = "uncertain"
                     scored_df.loc[idx, "method"] = "ai_no_response"
 
+        # Flag all AI-adjudicated pairs for human review
+        ai_reviewed_mask = scored_df["method"] == "ai_adjudication"
+        already_flagged = scored_df["needs_human_review"]
+        newly_flagged = ai_reviewed_mask & ~already_flagged
+        scored_df.loc[newly_flagged, "needs_human_review"] = True
+        scored_df.loc[newly_flagged, "human_review_reason"] = \
+            "ai_adjudicated: AI decision pending human confirmation"
+
     # Save results
     output_path = os.path.join(state_dir, "adjudicated_pairs.csv")
     scored_df.to_csv(output_path, index=False)
@@ -279,6 +334,17 @@ def adjudicate_state(state: str, skip_ai: bool = False) -> pd.DataFrame:
         edge_path = os.path.join(state_dir, "edge_cases.csv")
         edge_cases.to_csv(edge_path, index=False)
         logger.info(f"Saved {len(edge_cases)} edge cases to {edge_path}")
+
+    # Save human review worklist: AI-adjudicated pairs flagged for confirmation.
+    # Includes AI decision + rationale so reviewer can confirm or override.
+    review_pairs = scored_df[scored_df["needs_human_review"]]
+    if not review_pairs.empty:
+        review_path = os.path.join(state_dir, "human_review_pairs.csv")
+        review_pairs.to_csv(review_path, index=False)
+        logger.info(
+            f"Saved {len(review_pairs)} pairs for human review "
+            f"(AI-adjudicated, flagged for confirmation) to {review_path}"
+        )
 
     # Log summary
     decision_counts = scored_df["decision"].value_counts().to_dict()
@@ -304,3 +370,8 @@ if __name__ == "__main__":
     if (result_df["edge_case"] != "").any():
         print(f"\nEdge cases:")
         print(result_df["edge_case"].value_counts().to_string())
+    human_review = result_df["needs_human_review"].sum()
+    if human_review:
+        print(f"\nHuman review needed: {human_review} pairs")
+        print(result_df.loc[result_df["needs_human_review"],
+                            "human_review_reason"].value_counts().to_string())
