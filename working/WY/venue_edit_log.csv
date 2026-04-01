@@ -1,0 +1,4 @@
+timestamp,action,details
+2026-03-31T11:45:21.507080,merge,"{""merged_groups"": [26, 31], ""merged_venue_ids"": [""WY-00027"", ""WY-00032""], ""target_group"": 26, ""target_venue_id"": ""WY-00027"", ""total_records"": 2, ""notes"": ""same location""}"
+2026-03-31T11:46:51.563092,split,"{""source_group"": 11, ""source_venue_id"": ""WY-00014"", ""new_group"": 70, ""new_venue_id"": ""WY-00012"", ""record_ids_moved"": [28552, 73455, 73456, 73457, 13840, 53492, 59064, 33946, 51071], ""notes"": ""Holiday inn bar is a separate establishment than the cruising area around holiday inn.""}"
+2026-03-31T11:47:18.923654,merge,"{""merged_groups"": [70, 17], ""merged_venue_ids"": [""WY-00012"", ""WY-00019""], ""target_group"": 17, ""target_venue_id"": ""WY-00012"", ""total_records"": 17, ""notes"": ""same location""}"

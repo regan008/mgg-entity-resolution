@@ -177,6 +177,16 @@ def preprocess_state(state: str) -> pd.DataFrame:
         f"NA-title: {na_title_count}, empty comparison_text: {empty_comparison}"
     )
 
+    # Record pipeline stats
+    from pipeline_stats import StatsTracker
+    StatsTracker().record(state, "preprocess", {
+        "total_records": len(df),
+        "tier1_count": tier_counts.get(1, 0),
+        "tier2_count": tier_counts.get(2, 0),
+        "na_title_count": int(na_title_count),
+        "empty_comparison_text": int(empty_comparison),
+    })
+
     return df
 
 

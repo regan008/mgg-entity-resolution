@@ -200,6 +200,91 @@ def get_stats():
     })
 
 
+@app.route("/api/pairs")
+def get_pairs_batch():
+    """Return a page of pairs for batch review view."""
+    page = int(request.args.get("page", 0))
+    per_page = int(request.args.get("per_page", 20))
+    filter_type = request.args.get("filter", "all")
+    show_reviewed = request.args.get("show_reviewed", "true") == "true"
+
+    # Build filtered index list
+    indices = []
+    for i, pair in enumerate(PAIRS):
+        key = (int(pair["id_a"]), int(pair["id_b"]))
+        is_reviewed = key in DECISIONS
+
+        if not show_reviewed and is_reviewed:
+            continue
+
+        if filter_type == "all":
+            indices.append(i)
+        elif filter_type == "unreviewed" and not is_reviewed:
+            indices.append(i)
+        elif filter_type == "ai_adjudicated" and "ai_adjudicated" in _safe_str(pair.get("human_review_reason")):
+            indices.append(i)
+        elif filter_type == "signal_disagreement" and "signal_disagreement" in _safe_str(pair.get("human_review_reason")):
+            indices.append(i)
+
+    total_filtered = len(indices)
+    start = page * per_page
+    page_indices = indices[start:start + per_page]
+
+    pairs_out = []
+    for idx in page_indices:
+        data = _build_pair_response(idx)
+        if data:
+            pairs_out.append(data)
+
+    return jsonify({
+        "pairs": pairs_out,
+        "total_filtered": total_filtered,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": (total_filtered + per_page - 1) // per_page if per_page > 0 else 0,
+    })
+
+
+@app.route("/api/decide_batch", methods=["POST"])
+def save_batch_decisions():
+    """Save multiple human review decisions at once."""
+    data = request.json
+    decision = data["decision"]  # match, reject, skip
+    notes = data.get("notes", "")
+    pair_keys = data["pairs"]  # list of {"id_a": ..., "id_b": ...}
+
+    saved = 0
+    for pk in pair_keys:
+        id_a = int(pk["id_a"])
+        id_b = int(pk["id_b"])
+
+        pair = None
+        for p in PAIRS:
+            if int(p["id_a"]) == id_a and int(p["id_b"]) == id_b:
+                pair = p
+                break
+        if pair is None:
+            continue
+
+        row = {
+            "id_a": id_a,
+            "id_b": id_b,
+            "human_decision": decision,
+            "human_notes": notes,
+            "ai_decision": _safe_str(pair.get("decision")),
+            "ai_confidence": round(float(pair["ai_confidence"]), 3) if pd.notna(pair.get("ai_confidence")) else "",
+            "ai_rationale": _safe_str(pair.get("ai_rationale")),
+            "review_reason": _safe_str(pair.get("human_review_reason")),
+            "composite_score": round(float(pair["composite_score"]), 4),
+            "timestamp": datetime.now().isoformat(),
+        }
+        DECISIONS[(id_a, id_b)] = row
+        saved += 1
+
+    _write_decisions_csv()
+    return jsonify({"status": "saved", "saved": saved, "reviewed": len(DECISIONS)})
+
+
 @app.route("/api/decide", methods=["POST"])
 def save_decision():
     """Save a human review decision. Writes immediately to CSV."""

@@ -244,6 +244,17 @@ def block_state(state: str) -> pd.DataFrame:
         f"(compression: {compression:.4%} of {max_pairs:,} possible pairs)"
     )
 
+    # Record pipeline stats
+    from pipeline_stats import StatsTracker
+    strategy_counts = pairs_df["block_strategy"].value_counts().to_dict()
+    StatsTracker().record(state, "block", {
+        "candidate_pairs": len(pairs_df),
+        "tier1_pairs": strategy_counts.get("tier1", 0),
+        "tier2_pairs": strategy_counts.get("tier2", 0),
+        "cross_tier_pairs": strategy_counts.get("cross_tier", 0),
+        "compression_ratio": round(compression, 6),
+    })
+
     return pairs_df
 
 

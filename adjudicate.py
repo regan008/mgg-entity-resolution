@@ -350,6 +350,18 @@ def adjudicate_state(state: str, skip_ai: bool = False) -> pd.DataFrame:
     decision_counts = scored_df["decision"].value_counts().to_dict()
     logger.info(f"Final decisions: {decision_counts}")
 
+    # Record pipeline stats
+    from pipeline_stats import StatsTracker
+    ai_reviewed = scored_df[scored_df["method"] == "ai_adjudication"]
+    StatsTracker().record(state, "adjudicate", {
+        "ai_matched": int((ai_reviewed["decision"] == "match").sum()),
+        "ai_rejected": int((ai_reviewed["decision"] == "reject").sum()),
+        "ai_uncertain": int((ai_reviewed["decision"] == "uncertain").sum()),
+        "signal_disagreement_count": int((scored_df["edge_case"] == "signal_disagreement").sum()),
+        "edge_case_count": int((scored_df["edge_case"] != "").sum()),
+        "human_review_total": int(scored_df["needs_human_review"].sum()),
+    })
+
     return scored_df
 
 

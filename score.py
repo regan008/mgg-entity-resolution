@@ -194,6 +194,17 @@ def score_state(state: str) -> pd.DataFrame:
         f"AI adjudication={ai_range}, auto-reject={auto_reject}"
     )
 
+    # Record pipeline stats
+    from pipeline_stats import StatsTracker
+    StatsTracker().record(state, "score", {
+        "total_pairs_scored": len(scored_df),
+        "auto_match_count": int(auto_match),
+        "ai_review_count": int(ai_range),
+        "auto_reject_count": int(auto_reject),
+        "mean_composite": round(float(scored_df["composite_score"].mean()), 4),
+        "median_composite": round(float(scored_df["composite_score"].median()), 4),
+    })
+
     return scored_df
 
 
