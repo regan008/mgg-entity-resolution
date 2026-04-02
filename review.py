@@ -81,16 +81,70 @@ def merge_decisions(state: str):
     print(adj_df["method"].value_counts().to_string())
     print(f"\nSaved to {adj_path}")
 
-    # Record pipeline stats
+    # Record pipeline stats (including AI accuracy metrics)
     from pipeline_stats import StatsTracker
     final_decisions = adj_df["decision"].value_counts().to_dict()
+
+    # AI accuracy: compute from human_review_decisions.csv
+    # (which has both ai_decision and human_decision side by side)
+    ai_accuracy_stats = _compute_ai_accuracy(decisions_df)
+
     StatsTracker().record(state, "human_review", {
         "confirmed": confirmed,
         "overridden": overridden,
         "skipped": accepted_skip,
         "final_matches": final_decisions.get("match", 0),
         "final_rejects": final_decisions.get("reject", 0),
+        **ai_accuracy_stats,
     })
+
+
+def _compute_ai_accuracy(decisions_df: pd.DataFrame) -> dict:
+    """
+    Compute AI adjudication accuracy metrics by comparing
+    AI decisions to human decisions.
+
+    Returns dict of metric_name -> value for StatsTracker.
+    """
+    # Exclude skips — human chose not to evaluate, so no ground truth
+    evaluated = decisions_df[decisions_df["human_decision"] != "skip"].copy()
+    if evaluated.empty:
+        return {}
+
+    total_evaluated = len(evaluated)
+    agreed = (evaluated["ai_decision"] == evaluated["human_decision"]).sum()
+
+    # Break down by AI decision type
+    ai_match = evaluated[evaluated["ai_decision"] == "match"]
+    ai_reject = evaluated[evaluated["ai_decision"] == "reject"]
+    ai_uncertain = evaluated[evaluated["ai_decision"] == "uncertain"]
+
+    stats = {
+        "ai_accuracy_overall": round(agreed / total_evaluated, 4) if total_evaluated else 0,
+        "ai_accuracy_total_evaluated": total_evaluated,
+    }
+
+    # Match precision: of AI matches, how many did human confirm?
+    if len(ai_match) > 0:
+        match_correct = (ai_match["human_decision"] == "match").sum()
+        stats["ai_match_precision"] = round(match_correct / len(ai_match), 4)
+        stats["ai_match_correct"] = int(match_correct)
+        stats["ai_match_total"] = len(ai_match)
+
+    # Reject precision: of AI rejects, how many did human confirm?
+    if len(ai_reject) > 0:
+        reject_correct = (ai_reject["human_decision"] == "reject").sum()
+        stats["ai_reject_precision"] = round(reject_correct / len(ai_reject), 4)
+        stats["ai_reject_correct"] = int(reject_correct)
+        stats["ai_reject_total"] = len(ai_reject)
+
+    # Uncertain breakdown
+    if len(ai_uncertain) > 0:
+        stats["ai_uncertain_total"] = len(ai_uncertain)
+        stats["ai_uncertain_human_matched"] = int((ai_uncertain["human_decision"] == "match").sum())
+        stats["ai_uncertain_human_rejected"] = int((ai_uncertain["human_decision"] == "reject").sum())
+
+    return stats
 
 
 if __name__ == "__main__":

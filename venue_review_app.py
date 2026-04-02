@@ -478,10 +478,70 @@ def approve():
     draft_path = os.path.join(WORKING_DIR, "venue_assignments_draft.csv")
     approved_path = os.path.join(WORKING_DIR, "venue_assignments_approved.csv")
     shutil.copy2(draft_path, approved_path)
+
+    # Record venue assignment accuracy stats
+    _record_venue_accuracy()
+
     return jsonify({
         "status": "approved",
         "message": f"Approved. Run: python assign_ids.py {STATE} --commit",
         "edits_made": len(EDIT_LOG),
+    })
+
+
+def _record_venue_accuracy():
+    """
+    Compute venue assignment accuracy by analyzing the edit log.
+
+    Accuracy = groups that needed no correction / total original groups.
+    Also breaks down by edit type (split, merge, reassign).
+    """
+    from pipeline_stats import StatsTracker
+
+    # Read consolidated_groups to get original group count
+    groups_path = os.path.join(WORKING_DIR, "consolidated_groups.csv")
+    if not os.path.exists(groups_path):
+        return
+
+    groups_df = pd.read_csv(groups_path)
+    original_groups = groups_df["group_id"].nunique()
+
+    # Count edits by type
+    splits = sum(1 for e in EDIT_LOG if e["action"] == "split")
+    merges = sum(1 for e in EDIT_LOG if e["action"] == "merge")
+    reassigns = sum(1 for e in EDIT_LOG if e["action"] == "reassign")
+    total_edits = len(EDIT_LOG)
+
+    # Count unique original groups affected by edits
+    affected_groups = set()
+    for entry in EDIT_LOG:
+        action = entry["action"]
+        if action == "split":
+            affected_groups.add(entry.get("source_group"))
+        elif action == "merge":
+            for gid in entry.get("merged_groups", []):
+                affected_groups.add(gid)
+        elif action == "reassign":
+            affected_groups.add(entry.get("from_group"))
+            affected_groups.add(entry.get("to_group"))
+    affected_groups.discard(None)
+
+    groups_needing_correction = len(affected_groups)
+    groups_correct = original_groups - groups_needing_correction
+    accuracy = groups_correct / original_groups if original_groups > 0 else 1.0
+
+    final_groups = len(GROUP_META)
+
+    StatsTracker().record(STATE, "venue_review", {
+        "original_groups": original_groups,
+        "final_groups": final_groups,
+        "total_edits": total_edits,
+        "splits": splits,
+        "merges": merges,
+        "reassigns": reassigns,
+        "groups_needing_correction": groups_needing_correction,
+        "groups_correct": groups_correct,
+        "venue_assignment_accuracy": round(accuracy, 4),
     })
 
 
