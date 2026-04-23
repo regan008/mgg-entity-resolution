@@ -183,7 +183,27 @@ See [`wy_adaptive_scoring_decision.md`](wy_adaptive_scoring_decision.md) for ful
 | `high_name_low_addr` | JW ≥ 0.8, token overlap < 0.3 | Possible relocation |
 | `signal_disagreement` | Embedding ≥ 0.60, JW < 0.55, addr < 0.50 | Semantic false positive (e.g., "Cowboy Bar" vs "Rancher Bar") |
 
-Signal disagreement pairs are sent through AI adjudication but also flagged with `needs_human_review=True` for manual confirmation. All AI-adjudicated pairs are flagged for human review.
+Signal disagreement pairs are sent through AI adjudication but also flagged with `needs_human_review=True` for manual confirmation.
+
+### Human Review Triage
+
+Not all AI-adjudicated pairs require human review. After AI adjudication, pairs are triaged:
+
+| AI Result | Human Review? | Rationale |
+|-----------|---------------|-----------|
+| Any decision with confidence ≥ 0.90 | **No** — auto-accepted | WY calibration: 100% accuracy (81/81 pairs) |
+| AI reject at any confidence | **No** — auto-accepted | WY calibration: 100% accuracy (54/54 rejects) |
+| AI match with confidence < 0.90 | **Yes** | WY calibration: only 41% accuracy in 0.80–0.90 band |
+| AI uncertain | **Yes** | AI couldn't decide — human judgment needed |
+| Signal disagreement pairs | **Yes** | Always flagged regardless of confidence |
+
+**Impact**: For DE (844 records, 3,624 AI-range pairs), this reduced human review from 3,624 pairs to ~445 — an 88% reduction — while maintaining quality by focusing human attention on the cases where AI is least reliable.
+
+**Resume support**: If the API call is interrupted mid-run, use `--resume` to pick up where it stopped:
+```
+ANTHROPIC_API_KEY=sk-... python3 adjudicate.py DE --resume
+```
+Progress is saved after each batch of 20 pairs.
 
 ### Configuration
 
@@ -193,9 +213,10 @@ Signal disagreement pairs are sent through AI adjudication but also flagged with
 | `AUTO_REJECT_THRESHOLD` | 0.50 | `config.py:88` |
 | `AI_BATCH_SIZE` | 20 | `config.py:89` |
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-20250514` | `config.py:90` |
-| `SIGNAL_DISAGREE_EMB_MIN` | 0.60 | `config.py:100` |
-| `SIGNAL_DISAGREE_JW_MAX` | 0.55 | `config.py:101` |
-| `SIGNAL_DISAGREE_ADDR_MAX` | 0.50 | `config.py:102` |
+| `AI_HIGH_CONFIDENCE_THRESHOLD` | 0.90 | `config.py:98` |
+| `SIGNAL_DISAGREE_EMB_MIN` | 0.60 | `config.py:105` |
+| `SIGNAL_DISAGREE_JW_MAX` | 0.55 | `config.py:106` |
+| `SIGNAL_DISAGREE_ADDR_MAX` | 0.50 | `config.py:107` |
 
 ### Output Columns
 

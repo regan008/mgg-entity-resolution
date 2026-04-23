@@ -138,36 +138,25 @@ def commit_to_sqlite(state: str):
 
     assignments_df = pd.read_csv(source_path)
     groups_df = pd.read_csv(os.path.join(working_dir, "consolidated_groups.csv"))
-
-    conn = sqlite3.connect(config.DB_PATH)
-    cursor = conn.cursor()
-
-    # Create table if it doesn't exist
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS venue_assignments (
-            location_id INTEGER PRIMARY KEY,
-            venue_id TEXT NOT NULL,
-            group_size INTEGER,
-            confidence_score REAL,
-            resolution_method TEXT,
-            flags TEXT,
-            date_assigned TEXT,
-            FOREIGN KEY (location_id) REFERENCES locations(id)
-        )
-    """)
-
-    # Delete existing assignments for this state (idempotent re-runs)
-    state_ids = assignments_df["location_id"].tolist()
-    placeholders = ",".join("?" * len(state_ids))
-    cursor.execute(
-        f"DELETE FROM venue_assignments WHERE location_id IN ({placeholders})",
-        state_ids,
-    )
-
-    # Insert new assignments
-    now = datetime.now().isoformat()
     groups_lookup = groups_df.set_index("record_id")
 
+    # ---- Pre-validation (before touching the DB) ----
+    # Confirm every location_id we're about to insert has a matching row in
+    # consolidated_groups. If not, fail loudly *before* the DELETE so we don't
+    # wipe state we can't replace.
+    assignment_ids = set(int(x) for x in assignments_df["location_id"])
+    missing_ids = assignment_ids - set(int(x) for x in groups_lookup.index)
+    if missing_ids:
+        sample = sorted(missing_ids)[:10]
+        raise RuntimeError(
+            f"{len(missing_ids)} location_ids in {source_path} are missing from "
+            f"consolidated_groups.csv (sample: {sample}). Refusing to commit — "
+            f"this would leave records without venue_ids. Re-run consolidate.py "
+            f"and assign_ids.py to regenerate."
+        )
+
+    # Build insert rows up-front so a KeyError or type error fails before DELETE.
+    now = datetime.now().isoformat()
     insert_rows = []
     for _, row in assignments_df.iterrows():
         rid = int(row["location_id"])
@@ -182,25 +171,63 @@ def commit_to_sqlite(state: str):
             now,
         ))
 
-    cursor.executemany(
-        """INSERT INTO venue_assignments
-           (location_id, venue_id, group_size, confidence_score, resolution_method, flags, date_assigned)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        insert_rows,
-    )
+    state_ids = assignments_df["location_id"].tolist()
+    placeholders = ",".join("?" * len(state_ids))
 
-    conn.commit()
-    print(f"\nCommitted {len(insert_rows)} venue assignments to SQLite")
-    print(f"  Unique venues: {assignments_df['venue_id'].nunique()}")
+    conn = sqlite3.connect(config.DB_PATH)
+    try:
+        cursor = conn.cursor()
 
-    # Verify
-    count = cursor.execute(
-        f"SELECT COUNT(*) FROM venue_assignments WHERE location_id IN ({placeholders})",
-        state_ids,
-    ).fetchone()[0]
-    print(f"  Verified: {count} rows in venue_assignments table")
+        # Create table if it doesn't exist (schema setup, commit independently)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS venue_assignments (
+                location_id INTEGER PRIMARY KEY,
+                venue_id TEXT NOT NULL,
+                group_size INTEGER,
+                confidence_score REAL,
+                resolution_method TEXT,
+                flags TEXT,
+                date_assigned TEXT,
+                FOREIGN KEY (location_id) REFERENCES locations(id)
+            )
+        """)
+        conn.commit()
 
-    conn.close()
+        # ---- Atomic DELETE + INSERT ----
+        # `with conn:` rolls back on any exception, commits on success. If the
+        # INSERT fails for any reason (constraint violation, disk error, KeyboardInterrupt),
+        # the DELETE is rolled back too — no records lose their venue_id.
+        with conn:
+            cursor.execute(
+                f"DELETE FROM venue_assignments WHERE location_id IN ({placeholders})",
+                state_ids,
+            )
+            cursor.executemany(
+                """INSERT INTO venue_assignments
+                   (location_id, venue_id, group_size, confidence_score, resolution_method, flags, date_assigned)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                insert_rows,
+            )
+
+        print(f"\nCommitted {len(insert_rows)} venue assignments to SQLite")
+        print(f"  Unique venues: {assignments_df['venue_id'].nunique()}")
+
+        # Verify (read-only, outside the transaction)
+        count = cursor.execute(
+            f"SELECT COUNT(*) FROM venue_assignments WHERE location_id IN ({placeholders})",
+            state_ids,
+        ).fetchone()[0]
+        print(f"  Verified: {count} rows in venue_assignments table")
+        if count != len(insert_rows):
+            raise RuntimeError(
+                f"Verification failed: expected {len(insert_rows)} rows, found {count}"
+            )
+    except Exception:
+        # Re-raise after ensuring the connection is closed cleanly
+        conn.close()
+        raise
+    else:
+        conn.close()
 
     # Save final copy
     final_path = os.path.join(working_dir, "venue_assignments.csv")

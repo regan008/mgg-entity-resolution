@@ -56,9 +56,20 @@ class StatsTracker:
         self._save()
 
     def _save(self):
-        """Write all rows to CSV."""
+        """
+        Write all rows to CSV atomically.
+
+        Writes to a sibling .tmp file, fsyncs it to disk, then os.replace()s it
+        onto the final path. os.replace() is atomic on POSIX, so a crash mid-write
+        cannot leave pipeline_stats.csv truncated and lose accumulated history.
+        """
         df = pd.DataFrame(self.rows, columns=COLUMNS)
-        df.to_csv(self.path, index=False)
+        tmp_path = self.path + ".tmp"
+        df.to_csv(tmp_path, index=False)
+        # Ensure the tmp file is fully on disk before rename
+        with open(tmp_path, "rb") as f:
+            os.fsync(f.fileno())
+        os.replace(tmp_path, self.path)
 
     def get_state_summary(self, state: str) -> pd.DataFrame:
         """Return a pivot table of metrics for a given state (latest run per stage)."""

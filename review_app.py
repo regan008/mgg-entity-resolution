@@ -324,17 +324,28 @@ def save_decision():
 
 
 def _write_decisions_csv():
-    """Rewrite the full decisions CSV (ensures consistency)."""
+    """
+    Rewrite the full decisions CSV atomically.
+
+    Writes to a sibling .tmp file, fsyncs it to disk, then os.replace()s it
+    onto the final path. os.replace() is atomic on POSIX, so a crash mid-write
+    can never leave the decisions file truncated or partially written —
+    readers either see the previous complete version or the new complete version.
+    """
     fieldnames = [
         "id_a", "id_b", "human_decision", "human_notes",
         "ai_decision", "ai_confidence", "ai_rationale",
         "review_reason", "composite_score", "timestamp",
     ]
-    with open(DECISIONS_PATH, "w", newline="") as f:
+    tmp_path = DECISIONS_PATH + ".tmp"
+    with open(tmp_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for row in DECISIONS.values():
             writer.writerow(row)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp_path, DECISIONS_PATH)
 
 
 if __name__ == "__main__":

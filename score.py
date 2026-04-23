@@ -128,48 +128,66 @@ def score_state(state: str) -> pd.DataFrame:
     # Build id -> embedding index mapping
     id_to_idx = {rid: i for i, rid in enumerate(id_list)}
 
-    # Score all pairs
+    # Score all pairs (vectorized — formerly an iterrows loop, ~5-10x slower)
     logger.info(f"Scoring {len(pairs_df)} candidate pairs")
 
-    results = []
-    for _, pair_row in pairs_df.iterrows():
-        id_a = int(pair_row["id_a"])
-        id_b = int(pair_row["id_b"])
+    # --- Embedding cosine similarity ---
+    # Embeddings are L2-normalized at compute time, so cosine sim == dot product.
+    idx_a = pairs_df["id_a"].map(id_to_idx).to_numpy()
+    idx_b = pairs_df["id_b"].map(id_to_idx).to_numpy()
+    emb_sims = np.sum(embeddings[idx_a] * embeddings[idx_b], axis=1)
 
-        rec_a = record_lookup.loc[id_a]
-        rec_b = record_lookup.loc[id_b]
+    # --- Pull per-side text columns via reindex ---
+    # reindex preserves alignment with pairs_df row order and handles duplicate
+    # id values correctly (each pair gets its own copy).
+    text_cols = record_lookup[["comparison_text", "norm_address"]]
+    side_a = text_cols.reindex(pairs_df["id_a"].values)
+    side_b = text_cols.reindex(pairs_df["id_b"].values)
 
-        # Embedding cosine similarity
-        emb_sim = cosine_sim(embeddings[id_to_idx[id_a]],
-                             embeddings[id_to_idx[id_b]])
+    ct_a = side_a["comparison_text"].fillna("").astype(str).to_numpy()
+    ct_b = side_b["comparison_text"].fillna("").astype(str).to_numpy()
+    addr_a = side_a["norm_address"].fillna("").astype(str).to_numpy()
+    addr_b = side_b["norm_address"].fillna("").astype(str).to_numpy()
 
-        # Jaro-Winkler on comparison_text (norm_name for regular, desc+addr for NA)
-        jw_sim = jaro_winkler_score(
-            str(rec_a["comparison_text"]),
-            str(rec_b["comparison_text"]),
-        )
+    # --- Jaro-Winkler and token overlap ---
+    # Both jellyfish and set-ops are pure-Python per pair, so we still loop.
+    # Critical difference: no DataFrame .loc lookup overhead per iteration —
+    # we're zipping over numpy arrays of plain strings.
+    jw_sims = np.fromiter(
+        (jaro_winkler_score(a, b) for a, b in zip(ct_a, ct_b)),
+        dtype=np.float64, count=len(pairs_df),
+    )
+    tok_overlaps = np.fromiter(
+        (token_set_overlap(a, b) for a, b in zip(addr_a, addr_b)),
+        dtype=np.float64, count=len(pairs_df),
+    )
 
-        # Token overlap on addresses
-        addr_a = str(rec_a["norm_address"])
-        addr_b = str(rec_b["norm_address"])
-        tok_overlap = token_set_overlap(addr_a, addr_b)
+    # --- Adaptive composite score ---
+    # When either address is missing, redistribute the address weight to embedding+JW.
+    addr_missing_mask = np.fromiter(
+        ((not a.strip()) or (not b.strip()) for a, b in zip(addr_a, addr_b)),
+        dtype=bool, count=len(pairs_df),
+    )
+    comp_with_addr = (
+        config.WEIGHT_EMBEDDING * emb_sims
+        + config.WEIGHT_JARO_WINKLER * jw_sims
+        + config.WEIGHT_TOKEN_OVERLAP * tok_overlaps
+    )
+    comp_no_addr = (
+        config.WEIGHT_EMBEDDING_NO_ADDR * emb_sims
+        + config.WEIGHT_JARO_WINKLER_NO_ADDR * jw_sims
+    )
+    composites = np.where(addr_missing_mask, comp_no_addr, comp_with_addr)
 
-        # Adaptive weighting: redistribute address weight when missing
-        addr_missing = (not addr_a.strip()) or (not addr_b.strip())
-        comp = composite_score(emb_sim, jw_sim, tok_overlap,
-                               addr_missing=addr_missing)
-
-        results.append({
-            "id_a": id_a,
-            "id_b": id_b,
-            "embedding_sim": round(emb_sim, 4),
-            "jw_name_sim": round(jw_sim, 4),
-            "token_addr_overlap": round(tok_overlap, 4),
-            "composite_score": round(comp, 4),
-            "block_strategy": pair_row["block_strategy"],
-        })
-
-    scored_df = pd.DataFrame(results)
+    scored_df = pd.DataFrame({
+        "id_a": pairs_df["id_a"].astype(int).to_numpy(),
+        "id_b": pairs_df["id_b"].astype(int).to_numpy(),
+        "embedding_sim": np.round(emb_sims, 4),
+        "jw_name_sim": np.round(jw_sims, 4),
+        "token_addr_overlap": np.round(tok_overlaps, 4),
+        "composite_score": np.round(composites, 4),
+        "block_strategy": pairs_df["block_strategy"].to_numpy(),
+    })
 
     # Save
     output_path = os.path.join(state_dir, "scored_pairs.csv")

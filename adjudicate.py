@@ -74,15 +74,24 @@ def build_ai_prompt(pairs_batch: list[dict]) -> str:
 This project contains records of LGBTQ venues from Bob Damron's Address Books, published annually from 1965 to 2003.
 The same physical venue may appear across multiple years with varying names, addresses, and formatting due to OCR errors, transcription differences, and genuine changes.
 
-For each candidate pair below, determine whether the two records represent the SAME physical venue.
+For each candidate pair below, determine whether the two records represent the SAME BUSINESS — not just the same building or address. Two records are a match only if they are the same establishment operating under the same (or trivially varied) name.
 
-Consider:
-- Minor name variations (abbreviations, "The" prefix, apostrophe differences) usually indicate the same venue
-- Same address across years strongly suggests same venue, even with name changes
+MATCH — these indicate the same venue:
+- Minor name variations: abbreviations, "The" prefix, apostrophe differences, spelling errors (e.g., "Blue Moon" vs "The Blue Moon")
+- Slight name evolution over years at the same address (e.g., "Joe's Bar" vs "Joe's Bar & Grill")
+- Same name with a minor address change (venue relocated nearby)
+
+NOT A MATCH — these are different venues even if the address is identical:
+- Completely different names at the same address in different years likely means the business changed hands or was replaced (e.g., "Yum-Yum Pan Asian Bistro" and "Square One" at the same address are two different businesses)
+- Same address in the SAME year with different names likely means separate businesses in the same building — a complex, different units, or co-located establishments (e.g., a bar and a bookstore in the same building)
+- Chain businesses: some venues (especially bookstores, bathhouses, adult theaters) operated multiple locations in the same city. Two records with the same chain name but different addresses are different locations, not the same venue
+- Generic venue types at the same address (e.g., "Restaurant" and "Bar") are likely different businesses sharing a building
+- The only exception to this is cruising areas which frequently will have descriptive titles that may change.
+KEY PRINCIPLE: A shared address is NOT sufficient for a match. The names must be recognizably the same business. When names are completely different, default to NOT a match — even with the same address. Be conservative: when genuinely uncertain, say "uncertain".
+
+Additional context:
 - Different cities almost always means different venues
-- A venue may keep its name but change address if it relocated
 - Description fields may contain phone numbers, hours, or location details that can help identify matches
-- Be conservative: when genuinely uncertain, say "uncertain"
 
 For each pair, return a JSON object with:
 - "pair_index": the pair number (starting from 0)
@@ -125,11 +134,18 @@ Address overlap: {pair['token_addr_overlap']}
 def call_claude_api(prompt: str, max_retries: int = 3) -> list[dict]:
     """
     Call Claude API for adjudication. Returns list of match decisions.
-    Retries with exponential backoff on rate limit errors.
+
+    Retries with exponential backoff on:
+      - Rate limit errors (HTTP 429)
+      - JSON parse errors (transient malformed responses — typically truncation
+        or rare bad tokens; a fresh sample usually succeeds)
+
+    Returns [] on non-retryable errors or after max_retries exhausted.
     """
     client = anthropic.Anthropic()
 
     for attempt in range(max_retries):
+        text = ""
         try:
             response = client.messages.create(
                 model=config.ANTHROPIC_MODEL,
@@ -153,35 +169,55 @@ def call_claude_api(prompt: str, max_retries: int = 3) -> list[dict]:
             logger.warning(f"Rate limited, waiting {wait}s (attempt {attempt + 1})")
             time.sleep(wait)
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse AI response as JSON: {e}")
-            logger.error(f"Response text: {text[:500]}")
-            return []
+            # Retry: most JSON parse failures are transient (truncated stream,
+            # occasional bad token). Don't bail after a single bad batch.
+            logger.warning(
+                f"Failed to parse AI response as JSON (attempt {attempt + 1}/{max_retries}): {e}"
+            )
+            logger.warning(f"Response text head: {text[:500]}")
+            if attempt < max_retries - 1:
+                wait = 2 ** attempt
+                time.sleep(wait)
         except Exception as e:
-            logger.error(f"AI API call failed: {e}")
+            # Non-retryable: auth, malformed request, network failure, etc.
+            logger.error(f"AI API call failed (non-retryable): {e}")
             return []
 
     logger.error("Max retries exceeded for AI API call")
     return []
 
 
-def adjudicate_state(state: str, skip_ai: bool = False) -> pd.DataFrame:
+def adjudicate_state(state: str, skip_ai: bool = False,
+                     resume: bool = False) -> pd.DataFrame:
     """
     Apply tiered decision logic to all scored pairs for a state.
 
     Args:
         state: State code
         skip_ai: If True, mark AI-range pairs as 'needs_ai' without calling API
+        resume: If True, load existing adjudicated_pairs.csv and only process
+                pairs that weren't successfully AI-adjudicated
     """
     state_dir = os.path.join(config.WORKING_DIR, state)
     scored_path = os.path.join(state_dir, "scored_pairs.csv")
     preprocessed_path = os.path.join(state_dir, "preprocessed.csv")
+    output_path = os.path.join(state_dir, "adjudicated_pairs.csv")
 
     if not os.path.exists(scored_path):
         raise FileNotFoundError(
             f"Scored pairs not found: {scored_path}. Run score.py first."
         )
 
-    scored_df = pd.read_csv(scored_path)
+    # In resume mode, load the existing adjudicated file instead of starting fresh
+    if resume and os.path.exists(output_path):
+        scored_df = pd.read_csv(output_path)
+        logger.info(f"Resuming: loaded {len(scored_df)} pairs from {output_path}")
+        already_done = (scored_df["method"] == "ai_adjudication").sum()
+        not_done = (scored_df["method"] == "ai_no_response").sum()
+        logger.info(f"  Already adjudicated: {already_done}, remaining: {not_done}")
+    else:
+        scored_df = pd.read_csv(scored_path)
+
     records_df = pd.read_csv(preprocessed_path)
     records_lookup = records_df.set_index("id")
 
@@ -189,13 +225,14 @@ def adjudicate_state(state: str, skip_ai: bool = False) -> pd.DataFrame:
         logger.info(f"No scored pairs for state={state}")
         return scored_df
 
-    # Initialize decision columns
-    scored_df["decision"] = ""
-    scored_df["method"] = ""
-    scored_df["ai_confidence"] = None
-    scored_df["ai_rationale"] = ""
-    scored_df["needs_human_review"] = False
-    scored_df["human_review_reason"] = ""
+    # Initialize decision columns (only if not resuming)
+    if not resume or "decision" not in scored_df.columns:
+        scored_df["decision"] = ""
+        scored_df["method"] = ""
+        scored_df["ai_confidence"] = None
+        scored_df["ai_rationale"] = ""
+        scored_df["needs_human_review"] = False
+        scored_df["human_review_reason"] = ""
     # Pre-compute NA-title flag for each pair
     def _has_na_title(row):
         id_a, id_b = int(row["id_a"]), int(row["id_b"])
@@ -219,28 +256,47 @@ def adjudicate_state(state: str, skip_ai: bool = False) -> pd.DataFrame:
     scored_df.loc[auto_reject_mask, "decision"] = "reject"
     scored_df.loc[auto_reject_mask, "method"] = "auto_reject"
 
-    # Signal disagreement: flag for human review but let AI adjudicate first.
-    # These are pairs where embedding sees similarity but names clearly differ
-    # (e.g., "Cowboy Bar" vs "Rancher Bar"). AI takes a first pass, then
-    # the human reviewer confirms or overrides.
+    # Signal disagreement: pairs where embedding sees similarity but names clearly
+    # differ (e.g., "Cowboy Bar" vs "Rancher Bar"). These go through AI adjudication
+    # and then follow the same confidence-based triage as other AI pairs — they are
+    # NOT unconditionally flagged for human review. The triage after AI adjudication
+    # auto-accepts high-confidence decisions and rejects, only sending low-confidence
+    # matches to human review.
     signal_disagree_mask = scored_df["edge_case"] == "signal_disagreement"
-    scored_df.loc[signal_disagree_mask, "needs_human_review"] = True
-    scored_df.loc[signal_disagree_mask, "human_review_reason"] = \
-        "signal_disagreement: high embedding similarity but low name match"
 
     # AI adjudication range (signal disagreement pairs ARE included for AI review)
     ai_mask = (~auto_match_mask) & (~auto_reject_mask)
     ai_pairs = scored_df[ai_mask]
 
-    logger.info(
-        f"State={state}: auto-match={auto_match_mask.sum()}, "
-        f"AI range={len(ai_pairs)}, auto-reject={auto_reject_mask.sum()}, "
-        f"flagged for human review={signal_disagree_mask.sum()}, "
-        f"other edge cases={(scored_df['edge_case'].isin(['high_addr_low_name', 'high_name_low_addr'])).sum()}"
-    )
+    # In resume mode, only process pairs that failed (ai_no_response or uncertain method)
+    if resume:
+        needs_retry_mask = ai_mask & scored_df["method"].isin(["ai_no_response", "pending", ""])
+        ai_pairs = scored_df[needs_retry_mask]
+        logger.info(
+            f"State={state} (RESUME): {needs_retry_mask.sum()} pairs need AI adjudication "
+            f"({ai_mask.sum()} total AI range, {(ai_mask & (scored_df['method'] == 'ai_adjudication')).sum()} already done)"
+        )
+    else:
+        logger.info(
+            f"State={state}: auto-match={auto_match_mask.sum()}, "
+            f"AI range={len(ai_pairs)}, auto-reject={auto_reject_mask.sum()}, "
+            f"flagged for human review={signal_disagree_mask.sum()}, "
+            f"other edge cases={(scored_df['edge_case'].isin(['high_addr_low_name', 'high_name_low_addr'])).sum()}"
+        )
+
+    # Check for API key before attempting AI adjudication
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not skip_ai and not ai_pairs.empty and not api_key:
+        logger.error(
+            "ANTHROPIC_API_KEY is not set. Cannot run AI adjudication. "
+            "Either set the key or use --skip-ai. Aborting to avoid overwriting existing decisions."
+        )
+        raise SystemExit(1)
 
     if skip_ai or ai_pairs.empty:
-        if not ai_pairs.empty:
+        if not skip_ai and ai_pairs.empty and resume:
+            logger.info("All AI-range pairs already adjudicated — nothing to resume")
+        elif not ai_pairs.empty:
             scored_df.loc[ai_mask, "decision"] = "needs_ai"
             scored_df.loc[ai_mask, "method"] = "pending"
             logger.info("AI adjudication skipped — pairs marked as 'needs_ai'")
@@ -316,16 +372,56 @@ def adjudicate_state(state: str, skip_ai: bool = False) -> pd.DataFrame:
                     scored_df.loc[idx, "decision"] = "uncertain"
                     scored_df.loc[idx, "method"] = "ai_no_response"
 
-        # Flag all AI-adjudicated pairs for human review
-        ai_reviewed_mask = scored_df["method"] == "ai_adjudication"
-        already_flagged = scored_df["needs_human_review"]
-        newly_flagged = ai_reviewed_mask & ~already_flagged
-        scored_df.loc[newly_flagged, "needs_human_review"] = True
-        scored_df.loc[newly_flagged, "human_review_reason"] = \
-            "ai_adjudicated: AI decision pending human confirmation"
+            # Save progress after each batch (resume-safe)
+            scored_df.to_csv(output_path, index=False)
 
-    # Save results
-    output_path = os.path.join(state_dir, "adjudicated_pairs.csv")
+    # Triage: flag AI-adjudicated pairs for human review, BUT auto-accept:
+    #   1. AI rejects at any confidence (100% accuracy in WY calibration)
+    #   2. Any decision with confidence >= AI_HIGH_CONFIDENCE_THRESHOLD
+    # Only lower-confidence matches and uncertain calls need human review.
+    # This runs on every invocation (including --resume) to apply latest rules.
+    ai_reviewed_mask = scored_df["method"] == "ai_adjudication"
+
+    # Reset human review flags so triage is re-applied cleanly
+    scored_df.loc[ai_reviewed_mask, "needs_human_review"] = False
+    scored_df.loc[ai_reviewed_mask, "human_review_reason"] = ""
+
+    # Auto-accepted: high-confidence decisions OR any AI reject
+    auto_accepted = ai_reviewed_mask & (
+        (scored_df["ai_confidence"] >= config.AI_HIGH_CONFIDENCE_THRESHOLD) |
+        (scored_df["decision"] == "reject")
+    )
+    # Needs review: AI matches/uncertain with lower confidence
+    needs_review = ai_reviewed_mask & ~auto_accepted
+    scored_df.loc[needs_review, "needs_human_review"] = True
+
+    # Set review reason — distinguish signal disagreement from regular
+    sd_and_review = needs_review & (scored_df["edge_case"] == "signal_disagreement")
+    regular_review = needs_review & (scored_df["edge_case"] != "signal_disagreement")
+    scored_df.loc[sd_and_review, "human_review_reason"] = \
+        "signal_disagreement: AI match with low confidence — names differ despite embedding similarity"
+    scored_df.loc[regular_review, "human_review_reason"] = \
+        "ai_adjudicated: AI decision pending human confirmation"
+
+    # Log triage stats. The two auto-accept buckets must be mutually exclusive
+    # so that auto_high_conf + auto_reject + needs_review == total AI-reviewed.
+    # Auto-accept rule (line ~378): high-confidence non-rejects, OR any reject
+    # at any confidence. So we count rejects separately and exclude them from
+    # the high-confidence bucket to avoid double-counting.
+    n_auto_reject = (ai_reviewed_mask & (scored_df["decision"] == "reject")).sum()
+    n_auto_high_conf = (
+        ai_reviewed_mask
+        & (scored_df["decision"] != "reject")
+        & (scored_df["ai_confidence"] >= config.AI_HIGH_CONFIDENCE_THRESHOLD)
+    ).sum()
+    n_needs_review = needs_review.sum()
+    logger.info(
+        f"AI review triage: {n_auto_high_conf} auto-accepted (high confidence ≥{config.AI_HIGH_CONFIDENCE_THRESHOLD}), "
+        f"{n_auto_reject} auto-accepted (AI reject), "
+        f"{n_needs_review} flagged for human review"
+    )
+
+    # Save final results
     scored_df.to_csv(output_path, index=False)
 
     # Save edge cases separately
@@ -353,10 +449,14 @@ def adjudicate_state(state: str, skip_ai: bool = False) -> pd.DataFrame:
     # Record pipeline stats
     from pipeline_stats import StatsTracker
     ai_reviewed = scored_df[scored_df["method"] == "ai_adjudication"]
+    auto_accepted_high = ai_reviewed[ai_reviewed["ai_confidence"] >= config.AI_HIGH_CONFIDENCE_THRESHOLD]
+    auto_accepted_reject = ai_reviewed[(ai_reviewed["decision"] == "reject") & (ai_reviewed["ai_confidence"] < config.AI_HIGH_CONFIDENCE_THRESHOLD)]
     StatsTracker().record(state, "adjudicate", {
         "ai_matched": int((ai_reviewed["decision"] == "match").sum()),
         "ai_rejected": int((ai_reviewed["decision"] == "reject").sum()),
         "ai_uncertain": int((ai_reviewed["decision"] == "uncertain").sum()),
+        "ai_auto_accepted_high_conf": int(len(auto_accepted_high)),
+        "ai_auto_accepted_reject": int(len(auto_accepted_reject)),
         "signal_disagreement_count": int((scored_df["edge_case"] == "signal_disagreement").sum()),
         "edge_case_count": int((scored_df["edge_case"] != "").sum()),
         "human_review_total": int(scored_df["needs_human_review"].sum()),
@@ -374,8 +474,9 @@ if __name__ == "__main__":
 
     state = sys.argv[1] if len(sys.argv) > 1 else "WY"
     skip_ai = "--skip-ai" in sys.argv
+    resume = "--resume" in sys.argv
 
-    result_df = adjudicate_state(state, skip_ai=skip_ai)
+    result_df = adjudicate_state(state, skip_ai=skip_ai, resume=resume)
     print(f"\nAdjudicated {len(result_df)} pairs for {state}")
     print(f"\nDecision summary:")
     print(result_df["decision"].value_counts().to_string())

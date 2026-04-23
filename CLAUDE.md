@@ -48,6 +48,12 @@ Run any stage: `python3 {script}.py {STATE}` (e.g., `python3 preprocess.py WY`)
 
 5. **NA-title records** (6,121 with title="NA"): Use `description + street_address` as `comparison_text` for blocking and scoring instead of venue name.
 
+6. **AI confidence auto-accept** (`AI_HIGH_CONFIDENCE_THRESHOLD = 0.90`): AI decisions with confidence ≥ 0.90 and all AI rejects skip human review. WY calibration: 100% accuracy at ≥ 0.90 (81/81), 100% on rejects (54/54). Reduces human review volume by ~88% (e.g., DE: 3,624 → ~445 pairs).
+
+7. **Resume support**: `adjudicate.py --resume` picks up from interrupted API runs. Progress is saved after each batch of 20 pairs.
+
+8. **Cruising area isolation** (`is_cruising_area` flag, `amenity_id=90`): Cruising areas (outdoor spots, parks, rest areas) are blocked separately from named venues — they are only compared against other cruising areas or NA-title records. NA-title records are exempt from the filter because they often describe the same cruising location without a title in certain years. DE analysis: 2,179 mixed pairs dropped at blocking stage (2,008 were auto-rejects anyway; 127 legitimate NA-title↔cruising matches are preserved). The `is_cruising_area` column is added in `preprocess.py`; the filter runs in `block.py:block_state()`.
+
 ## Database Schema (key tables)
 
 - **locations**: `id`, `title`, `street_address`, `city`, `state`, `year`, `latitude`, `longitude`, `status`, `description`, ...

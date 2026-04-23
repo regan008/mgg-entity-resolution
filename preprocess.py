@@ -34,13 +34,36 @@ def load_state_data(state: str) -> pd.DataFrame:
     return df
 
 
-def normalize_name(name: str) -> str:
+def load_cruising_ids(state: str) -> set:
+    """
+    Return the set of location IDs that are cruising areas (amenity_id=90)
+    for the given state.
+    """
+    conn = sqlite3.connect(config.DB_PATH)
+    query = """
+        SELECT laa.location_id
+        FROM location_amenity_assignments laa
+        JOIN locations l ON l.id = laa.location_id
+        WHERE laa.amenity_id = 90
+          AND l.state = ?
+    """
+    df = pd.read_sql_query(query, conn, params=(state,))
+    conn.close()
+    return set(df["location_id"].tolist())
+
+
+def normalize_name(name) -> str:
     """
     Normalize a venue name: lowercase, strip punctuation, remove leading
     articles, collapse whitespace.
 
     Does NOT expand street abbreviations to avoid 'St. James' -> 'Street James'.
+
+    Accepts any input (NaN/None/numeric coerced to ""); returns "" for missing.
     """
+    if pd.isna(name):
+        return ""
+    name = str(name)
     if not name or name.strip().upper() == "NA":
         return ""
     text = name.lower()
@@ -55,11 +78,16 @@ def normalize_name(name: str) -> str:
     return text.strip()
 
 
-def normalize_address(address: str) -> str:
+def normalize_address(address) -> str:
     """
     Normalize an address: lowercase, remove periods, expand abbreviations
     (word-boundary safe), collapse whitespace.
+
+    Accepts any input (NaN/None/numeric coerced to ""); returns "" for missing.
     """
+    if pd.isna(address):
+        return ""
+    address = str(address)
     if not address or address.strip().upper() == "NA":
         return ""
     text = address.lower()
@@ -94,11 +122,16 @@ def normalize_address(address: str) -> str:
     return text.strip()
 
 
-def normalize_description(description: str) -> str:
+def normalize_description(description) -> str:
     """
     Normalize a description field: lowercase, strip punctuation,
     collapse whitespace. Used for NA-title records.
+
+    Accepts any input (NaN/None/numeric coerced to ""); returns "" for missing.
     """
+    if pd.isna(description):
+        return ""
+    description = str(description)
     if not description or description.strip().upper() == "NA":
         return ""
     text = description.lower()
@@ -146,6 +179,10 @@ def preprocess_state(state: str) -> pd.DataFrame:
     # Flag NA-title records
     df["is_na_title"] = (df["title"].str.strip().str.upper() == "NA") | df["title"].isna()
 
+    # Flag cruising area records (amenity_id=90 "Cruisy Area")
+    cruising_ids = load_cruising_ids(state)
+    df["is_cruising_area"] = df["id"].isin(cruising_ids)
+
     # Build comparison_text:
     # - Regular records: norm_name
     # - NA-title records: norm_description + norm_address combined
@@ -170,11 +207,13 @@ def preprocess_state(state: str) -> pd.DataFrame:
     # Log summary
     tier_counts = df["geocode_tier"].value_counts().to_dict()
     na_title_count = df["is_na_title"].sum()
+    cruising_area_count = df["is_cruising_area"].sum()
     empty_comparison = (df["comparison_text"] == "").sum()
     logger.info(
         f"State={state}: {len(df)} records, "
         f"Tier 1: {tier_counts.get(1, 0)}, Tier 2: {tier_counts.get(2, 0)}, "
-        f"NA-title: {na_title_count}, empty comparison_text: {empty_comparison}"
+        f"NA-title: {na_title_count}, cruising areas: {cruising_area_count}, "
+        f"empty comparison_text: {empty_comparison}"
     )
 
     # Record pipeline stats
@@ -184,6 +223,7 @@ def preprocess_state(state: str) -> pd.DataFrame:
         "tier1_count": tier_counts.get(1, 0),
         "tier2_count": tier_counts.get(2, 0),
         "na_title_count": int(na_title_count),
+        "cruising_area_count": int(cruising_area_count),
         "empty_comparison_text": int(empty_comparison),
     })
 

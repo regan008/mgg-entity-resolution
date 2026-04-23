@@ -158,6 +158,12 @@ def get_summary():
     })
 
 
+def _has_duplicate_years(gid):
+    """Check if a group has multiple records from the same year."""
+    years = [m["year"] for m in GROUPS.get(gid, []) if m["year"]]
+    return len(years) != len(set(years))
+
+
 @app.route("/api/groups")
 def get_groups():
     sort_by = request.args.get("sort", "size")  # size, venue_id, method, flags
@@ -173,6 +179,8 @@ def get_groups():
         gids = [g for g in gids if GROUP_META[g]["group_size"] == 1]
     elif filter_type == "flagged":
         gids = [g for g in gids if GROUP_META[g]["flags"]]
+    elif filter_type == "dup_years":
+        gids = [g for g in gids if _has_duplicate_years(g)]
 
     # Sort
     if sort_by == "size":
@@ -183,6 +191,22 @@ def get_groups():
         gids.sort(key=lambda g: GROUP_META[g]["resolution_method"])
     elif sort_by == "flags":
         gids.sort(key=lambda g: (0 if GROUP_META[g]["flags"] else 1, -GROUP_META[g]["group_size"]))
+    elif sort_by == "title":
+        # Sort by the first non-NA title in the group alphabetically
+        def _first_title(gid):
+            for m in GROUPS.get(gid, []):
+                if not m.get("is_na_title") and m.get("title"):
+                    return m["title"].lower()
+            return "zzz"
+        gids.sort(key=_first_title)
+    elif sort_by == "city":
+        # Sort by the first city in the group alphabetically
+        def _first_city(gid):
+            for m in GROUPS.get(gid, []):
+                if m.get("city"):
+                    return m["city"].lower()
+            return "zzz"
+        gids.sort(key=_first_city)
 
     total = len(gids)
     page_gids = gids[page * per_page:(page + 1) * per_page]

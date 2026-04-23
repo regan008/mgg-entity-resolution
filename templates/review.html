@@ -662,17 +662,40 @@ function viewDetail(idx) {
 
 // ── Keyboard shortcuts ──
 document.addEventListener('keydown', (e) => {
-  // Don't trigger if typing in an input
-  if (e.target.tagName === 'INPUT') return;
+  // Don't trigger if typing in an input or textarea
+  const tag = e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+  const key = e.key.toLowerCase();
 
   if (currentView === 'single') {
-    switch (e.key.toLowerCase()) {
-      case 'm': decide('match'); break;
-      case 'r': decide('reject'); break;
-      case 's': decide('skip'); break;
-      case 'arrowleft': navigate(-1); break;
-      case 'arrowright': navigate(1); break;
-      case 'u': jumpToUnreviewed(); break;
+    switch (key) {
+      case 'm': e.preventDefault(); decide('match'); break;
+      case 'r': e.preventDefault(); decide('reject'); break;
+      case 's': e.preventDefault(); decide('skip'); break;
+      case 'arrowleft': e.preventDefault(); navigate(-1); break;
+      case 'arrowright': e.preventDefault(); navigate(1); break;
+      case 'u': e.preventDefault(); jumpToUnreviewed(); break;
+    }
+  } else if (currentView === 'batch') {
+    switch (key) {
+      case 'm': e.preventDefault(); batchDecide('match'); break;
+      case 'r': e.preventDefault(); batchDecide('reject'); break;
+      case 's': e.preventDefault(); batchDecide('skip'); break;
+      case 'a':
+        // Select/deselect all visible
+        e.preventDefault();
+        const checkboxes = document.querySelectorAll('.batch-select');
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+        checkboxes.forEach(cb => {
+          cb.checked = !allChecked;
+          const key = cb.dataset.key;
+          if (cb.checked) selectedPairs.add(key); else selectedPairs.delete(key);
+        });
+        document.getElementById('selected-count').textContent = selectedPairs.size;
+        break;
+      case 'arrowleft': e.preventDefault(); if (batchPage > 0) loadBatchPage(batchPage - 1); break;
+      case 'arrowright': e.preventDefault(); loadBatchPage(batchPage + 1); break;
     }
   }
 });
