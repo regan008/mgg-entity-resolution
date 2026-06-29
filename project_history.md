@@ -4,6 +4,58 @@ A chronological record of key decisions made during pipeline development.
 
 ---
 
+### 2026-06-29 — Brick-and-mortar scope: exclude cruising areas at source
+
+**Decision**: Drop cruising area records (amenity_id=90) in stage 1 (`preprocess.py`) instead of isolating them at blocking. Only brick-and-mortar venues enter the pipeline.
+
+**Why**: Cruising areas (~16.4% of 181,741 records, 29,728 total) are a fundamentally different entity-resolution problem. 96% have descriptive *place* titles ("Lagarde Park", "Noble St. betw. 8th & 16th") that legitimately drift year to year — not business names. Name/embedding similarity metrics designed for business matching are the wrong tool. Excluding them at source eliminates dead code in blocking/scoring and clarifies the pipeline's scope for the article.
+
+**Trade-off**: Also drops ~1,119 untitled (NA-title) cruising records that the previous pipeline deliberately preserved. Under the brick-and-mortar scope, those entries will no longer be resolved. If cruising areas are resolved separately in the future, they belong in a dedicated track with geography-weighted logic, not the name-similarity pipeline.
+
+**Implementation**:
+- `preprocess.py` — after flagging `is_cruising_area`, filter out those records before writing `preprocessed.csv`
+- `block.py` — removed the cruising-isolation filter (`cruising_compatible()` and filter block); dead code under new scope
+
+**Impact**: WY 358 records → ~261 brick-and-mortar; DE 97/358 removed.
+
+---
+
+### 2026-06-29 — Switched AI adjudication from Claude Haiku to Gemini Flash Lite
+
+**Decision**: Replaced Claude Haiku 4.5 with Gemini Flash Lite (model `gemini-2.5-flash-lite`) for stage 4 (adjudication).
+
+**Why**: Cost ~11× lower per pair ($0.00036 vs $0.00041), making it economically feasible to expand AI coverage beyond the current 0.50–0.75 band — e.g., scan auto-reject pairs for false negatives (renames/relocations) or add group-level review after consolidation. The task is pattern matching on names/addresses (Haiku-grade work), so quality holds steady.
+
+**Technical changes**:
+- Replaced `anthropic` SDK with `google-genai`; error handling updated to `google.api_core.exceptions` (ResourceExhausted for rate limits)
+- Uses `response_mime_type="application/json"` so Gemini returns structured JSON directly — no markdown stripping needed
+- Single client instantiation per run (not per batch) to avoid authentication overhead
+- Resume support preserved; all triage logic (confidence thresholds, edge cases, signal disagreement) unchanged
+- Prompt text identical to Haiku version; revision deferred to after calibration testing on a small state
+
+**Config**: 
+- `GEMINI_MODEL = "gemini-2.5-flash-lite"` in `config.py`
+- `GEMINI_API_KEY_ENV = "GEMINI_API_KEY"` for env-var resolution
+
+**Dependencies**: Added `google-genai>=1.0`, `google-api-core>=2.0` to requirements.txt; removed `anthropic`.
+
+---
+
+### 2026-06-29 — Added .env file for Gemini API key
+
+**Decision**: Store `GEMINI_API_KEY` in a `.env` file (gitignored) rather than requiring manual `export` before running adjudicate.py.
+
+**Why**: Cleaner workflow — edit `.env` once, then run the pipeline without shell setup. The key is never committed (`.env` is in `.gitignore`).
+
+**Implementation**:
+- Create `.env` (gitignored template with placeholder `GEMINI_API_KEY=your-key-here`)
+- Wire `load_dotenv()` into `adjudicate.py` at module top (before any config reads `os.environ`)
+- Uses explicit path anchored to `__file__` so it works regardless of working directory
+
+**Dependencies**: Added `python-dotenv>=1.0` to requirements.txt.
+
+---
+
 ### 2026-03-26 — Adaptive weight redistribution
 
 **Decision**: When addresses are missing, redistribute the 25% address weight to embedding (66.7%) and Jaro-Winkler (33.3%), maintaining their 2:1 ratio.
