@@ -4,4 +4,6 @@ sentence-transformers>=2.2
 torch>=2.0
 jellyfish>=1.0
 pygeohash>=1.2
-anthropic>=0.40
+google-genai>=1.0
+google-api-core>=2.0
+python-dotenv>=1.0
