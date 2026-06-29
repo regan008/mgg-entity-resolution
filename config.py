@@ -87,7 +87,8 @@ WEIGHT_JARO_WINKLER_NO_ADDR = 1 / 3
 AUTO_MATCH_THRESHOLD = 0.75
 AUTO_REJECT_THRESHOLD = 0.50
 AI_BATCH_SIZE = 20
-ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
+GEMINI_MODEL = "gemini-2.5-flash-lite"
+GEMINI_API_KEY_ENV = "GEMINI_API_KEY"  # env var name; GOOGLE_API_KEY also accepted
 
 # Edge case detection thresholds
 EDGE_CASE_HIGH_ADDR_LOW_NAME_ADDR = 0.7  # Token overlap above this

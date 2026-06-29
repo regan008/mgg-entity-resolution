@@ -3,7 +3,7 @@ Stage 4: Tiered Decision-Making
 
 Applies tiered logic to scored pairs:
   - Auto-match: composite_score >= 0.75
-  - AI adjudication: 0.50 <= composite_score < 0.75 (sent to Claude)
+  - AI adjudication: 0.50 <= composite_score < 0.75 (sent to Gemini)
   - Auto-reject: composite_score < 0.50
 
 Also detects edge cases:
@@ -18,6 +18,9 @@ Human review workflow:
   - All AI-adjudicated pairs are also flagged for human review.
   - A separate human_review_pairs.csv is saved with AI decisions +
     rationale so the reviewer can confirm or override.
+
+API: Google Gemini via the google-genai SDK. Set GEMINI_API_KEY
+(or GOOGLE_API_KEY) before running.
 """
 import json
 import os
@@ -25,7 +28,9 @@ import logging
 import time
 
 import pandas as pd
-import anthropic
+from google import genai
+from google.genai import types
+from google.api_core.exceptions import ResourceExhausted, GoogleAPIError
 
 import config
 
@@ -68,7 +73,7 @@ def detect_edge_case(row: pd.Series, has_na_title: bool = False) -> str:
 
 def build_ai_prompt(pairs_batch: list[dict]) -> str:
     """
-    Build a prompt for Claude to adjudicate candidate pairs.
+    Build a prompt for Gemini to adjudicate candidate pairs.
     """
     prompt = """You are helping with entity resolution for the Mapping the Gay Guides project.
 This project contains records of LGBTQ venues from Bob Damron's Address Books, published annually from 1965 to 2003.
@@ -131,59 +136,66 @@ Address overlap: {pair['token_addr_overlap']}
     return prompt
 
 
-def call_claude_api(prompt: str, max_retries: int = 3) -> list[dict]:
+def _get_gemini_client() -> genai.Client:
+    """Resolve GEMINI_API_KEY (or GOOGLE_API_KEY fallback) and return a client."""
+    api_key = (os.environ.get(config.GEMINI_API_KEY_ENV)
+               or os.environ.get("GOOGLE_API_KEY"))
+    if not api_key:
+        raise SystemExit(
+            f"API key not set. Export {config.GEMINI_API_KEY_ENV} before running."
+        )
+    return genai.Client(api_key=api_key)
+
+
+def call_gemini_api(client: genai.Client, prompt: str,
+                    max_retries: int = 3) -> list[dict]:
     """
-    Call Claude API for adjudication. Returns list of match decisions.
+    Call Gemini for adjudication. Returns list of match decisions.
+
+    Uses response_mime_type='application/json' so the model is constrained
+    to return valid JSON directly — no markdown stripping needed.
 
     Retries with exponential backoff on:
-      - Rate limit errors (HTTP 429)
-      - JSON parse errors (transient malformed responses — typically truncation
-        or rare bad tokens; a fresh sample usually succeeds)
+      - Rate limit errors (ResourceExhausted / HTTP 429)
+      - JSON parse errors (rare malformed responses)
 
     Returns [] on non-retryable errors or after max_retries exhausted.
     """
-    client = anthropic.Anthropic()
-
     for attempt in range(max_retries):
         text = ""
         try:
-            response = client.messages.create(
-                model=config.ANTHROPIC_MODEL,
-                max_tokens=4096,
-                temperature=0,
-                messages=[{"role": "user", "content": prompt}],
+            response = client.models.generate_content(
+                model=config.GEMINI_MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0,
+                    response_mime_type="application/json",
+                ),
             )
-            text = response.content[0].text.strip()
-
-            # Extract JSON from response (handle markdown code blocks)
-            if text.startswith("```"):
-                text = text.split("```")[1]
-                if text.startswith("json"):
-                    text = text[4:]
-                text = text.strip()
-
+            text = (response.text or "").strip()
             return json.loads(text)
 
-        except anthropic.RateLimitError:
+        except ResourceExhausted:
             wait = 2 ** (attempt + 1)
             logger.warning(f"Rate limited, waiting {wait}s (attempt {attempt + 1})")
             time.sleep(wait)
         except json.JSONDecodeError as e:
-            # Retry: most JSON parse failures are transient (truncated stream,
-            # occasional bad token). Don't bail after a single bad batch.
             logger.warning(
-                f"Failed to parse AI response as JSON (attempt {attempt + 1}/{max_retries}): {e}"
+                f"Failed to parse Gemini response as JSON "
+                f"(attempt {attempt + 1}/{max_retries}): {e}"
             )
             logger.warning(f"Response text head: {text[:500]}")
             if attempt < max_retries - 1:
                 wait = 2 ** attempt
                 time.sleep(wait)
+        except GoogleAPIError as e:
+            logger.error(f"Gemini API error (non-retryable): {e}")
+            return []
         except Exception as e:
-            # Non-retryable: auth, malformed request, network failure, etc.
-            logger.error(f"AI API call failed (non-retryable): {e}")
+            logger.error(f"Unexpected error calling Gemini: {e}")
             return []
 
-    logger.error("Max retries exceeded for AI API call")
+    logger.error("Max retries exceeded for Gemini API call")
     return []
 
 
@@ -284,15 +296,6 @@ def adjudicate_state(state: str, skip_ai: bool = False,
             f"other edge cases={(scored_df['edge_case'].isin(['high_addr_low_name', 'high_name_low_addr'])).sum()}"
         )
 
-    # Check for API key before attempting AI adjudication
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not skip_ai and not ai_pairs.empty and not api_key:
-        logger.error(
-            "ANTHROPIC_API_KEY is not set. Cannot run AI adjudication. "
-            "Either set the key or use --skip-ai. Aborting to avoid overwriting existing decisions."
-        )
-        raise SystemExit(1)
-
     if skip_ai or ai_pairs.empty:
         if not skip_ai and ai_pairs.empty and resume:
             logger.info("All AI-range pairs already adjudicated — nothing to resume")
@@ -302,6 +305,7 @@ def adjudicate_state(state: str, skip_ai: bool = False,
             logger.info("AI adjudication skipped — pairs marked as 'needs_ai'")
     else:
         # Batch AI adjudication
+        gemini_client = _get_gemini_client()
         ai_indices = ai_pairs.index.tolist()
         total_batches = (len(ai_indices) + config.AI_BATCH_SIZE - 1) // config.AI_BATCH_SIZE
 
@@ -346,7 +350,7 @@ def adjudicate_state(state: str, skip_ai: bool = False,
             )
 
             prompt = build_ai_prompt(batch_data)
-            results = call_claude_api(prompt)
+            results = call_gemini_api(gemini_client, prompt)
 
             # Apply AI decisions
             for result in results:
@@ -472,6 +476,7 @@ if __name__ == "__main__":
     )
     import sys
 
+    # Usage: GEMINI_API_KEY=... python3 adjudicate.py WY [--skip-ai] [--resume]
     state = sys.argv[1] if len(sys.argv) > 1 else "WY"
     skip_ai = "--skip-ai" in sys.argv
     resume = "--resume" in sys.argv
