@@ -224,36 +224,6 @@ def block_cross_tier(df: pd.DataFrame) -> list[tuple[int, int, str]]:
     return pairs
 
 
-def cruising_compatible(id_a: int, id_b: int, id_to_flags: dict) -> bool:
-    """
-    Return True if a pair is semantically compatible for comparison.
-
-    Cruising areas (amenity_id=90 "Cruisy Area") are a distinct venue type —
-    outdoor spots, parks, rest areas — that should not be compared against
-    named non-cruising venues. They *can* match NA-title records because those
-    often describe the same cruising spot without a title in certain years.
-
-    Rules:
-      - Both cruising: always compare (same venue type)
-      - Neither cruising: always compare (standard venues)
-      - One cruising, one NA-title: allow (NA-title may describe the same spot)
-      - One cruising, one named non-cruising: skip (semantically incompatible)
-    """
-    a = id_to_flags.get(id_a, {})
-    b = id_to_flags.get(id_b, {})
-    a_cruising = bool(a.get("is_cruising_area", False))
-    b_cruising = bool(b.get("is_cruising_area", False))
-
-    # Both same type: always compatible
-    if a_cruising == b_cruising:
-        return True
-
-    # Mixed: only compatible if at least one is NA-title
-    a_na = bool(a.get("is_na_title", False))
-    b_na = bool(b.get("is_na_title", False))
-    return a_na or b_na
-
-
 def block_state(state: str) -> pd.DataFrame:
     """
     Run all blocking strategies for a state and save candidate pairs.
@@ -285,32 +255,9 @@ def block_state(state: str) -> pd.DataFrame:
         columns=["id_a", "id_b", "block_strategy"],
     )
 
-    # Apply cruising area isolation filter if flags are available in preprocessed data.
-    # Cruising areas (amenity "Cruisy Area") are semantically incompatible with named
-    # non-cruising venues and should not be compared against them. NA-title records are
-    # exempt because they often describe the same cruising spot without a name.
-    #
-    # Vectorized: reindex flag columns by id_a and id_b sides, then compute the
-    # mask in a single boolean expression. Replaces a per-row .apply(axis=1).
-    cruising_filtered = 0
-    if "is_cruising_area" in df.columns and "is_na_title" in df.columns and not pairs_df.empty:
-        flags = df.set_index("id")[["is_cruising_area", "is_na_title"]].fillna(False)
-        side_a = flags.reindex(pairs_df["id_a"].values)
-        side_b = flags.reindex(pairs_df["id_b"].values)
-        a_cr = side_a["is_cruising_area"].fillna(False).to_numpy(dtype=bool)
-        b_cr = side_b["is_cruising_area"].fillna(False).to_numpy(dtype=bool)
-        a_na = side_a["is_na_title"].fillna(False).to_numpy(dtype=bool)
-        b_na = side_b["is_na_title"].fillna(False).to_numpy(dtype=bool)
-        # Compatible if: both same cruising-status, OR at least one is NA-title.
-        mask = (a_cr == b_cr) | (a_na | b_na)
-        before = len(pairs_df)
-        pairs_df = pairs_df[mask].reset_index(drop=True)
-        cruising_filtered = before - len(pairs_df)
-        if cruising_filtered:
-            logger.info(
-                f"Cruising area filter: removed {cruising_filtered} incompatible "
-                f"(cruising × named venue) pairs"
-            )
+    # Cruising-area records are excluded upstream in preprocess.py
+    # (brick-and-mortar scope), so every record here is a named venue —
+    # no cruising isolation filter is needed.
 
     # Save
     output_path = os.path.join(config.WORKING_DIR, state, "candidate_pairs.csv")
@@ -333,7 +280,6 @@ def block_state(state: str) -> pd.DataFrame:
         "tier1_pairs": strategy_counts.get("tier1", 0),
         "tier2_pairs": strategy_counts.get("tier2", 0),
         "cross_tier_pairs": strategy_counts.get("cross_tier", 0),
-        "cruising_pairs_filtered": cruising_filtered,
         "compression_ratio": round(compression, 6),
     })
 

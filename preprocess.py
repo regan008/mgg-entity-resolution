@@ -183,6 +183,22 @@ def preprocess_state(state: str) -> pd.DataFrame:
     cruising_ids = load_cruising_ids(state)
     df["is_cruising_area"] = df["id"].isin(cruising_ids)
 
+    # SCOPE — brick-and-mortar venues only.
+    # Cruising areas (parks, beaches, rest areas, street stretches) are a
+    # fundamentally different entity-resolution problem: their titles are
+    # descriptive places that legitimately change year to year, not business
+    # names. They are excluded from this pipeline at the source, so they never
+    # enter blocking, scoring, or adjudication. (Previously they were only
+    # isolated during the blocking stage; under the brick-and-mortar scope they
+    # are dropped here.)
+    cruising_removed = int(df["is_cruising_area"].sum())
+    if cruising_removed:
+        df = df[~df["is_cruising_area"]].reset_index(drop=True)
+        logger.info(
+            f"Excluded {cruising_removed} cruising-area records "
+            f"({len(df)} brick-and-mortar records remain)"
+        )
+
     # Build comparison_text:
     # - Regular records: norm_name
     # - NA-title records: norm_description + norm_address combined
@@ -207,13 +223,12 @@ def preprocess_state(state: str) -> pd.DataFrame:
     # Log summary
     tier_counts = df["geocode_tier"].value_counts().to_dict()
     na_title_count = df["is_na_title"].sum()
-    cruising_area_count = df["is_cruising_area"].sum()
     empty_comparison = (df["comparison_text"] == "").sum()
     logger.info(
-        f"State={state}: {len(df)} records, "
+        f"State={state}: {len(df)} brick-and-mortar records "
+        f"({cruising_removed} cruising-area records excluded), "
         f"Tier 1: {tier_counts.get(1, 0)}, Tier 2: {tier_counts.get(2, 0)}, "
-        f"NA-title: {na_title_count}, cruising areas: {cruising_area_count}, "
-        f"empty comparison_text: {empty_comparison}"
+        f"NA-title: {na_title_count}, empty comparison_text: {empty_comparison}"
     )
 
     # Record pipeline stats
@@ -223,7 +238,7 @@ def preprocess_state(state: str) -> pd.DataFrame:
         "tier1_count": tier_counts.get(1, 0),
         "tier2_count": tier_counts.get(2, 0),
         "na_title_count": int(na_title_count),
-        "cruising_area_count": int(cruising_area_count),
+        "cruising_removed": cruising_removed,
         "empty_comparison_text": int(empty_comparison),
     })
 
