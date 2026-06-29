@@ -23,9 +23,12 @@ API: Google Gemini via the google-genai SDK. Set GEMINI_API_KEY
 (or GOOGLE_API_KEY) before running.
 """
 import json
-import os
 import logging
+import os
 import time
+
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))  # loads .env before config
 
 import pandas as pd
 from google import genai
