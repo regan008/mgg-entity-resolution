@@ -119,6 +119,11 @@ def _load_state(state: str, force: bool = False) -> dict:
     for gid in groups:
         groups[gid].sort(key=lambda r: r["year"] or 0)
 
+    # Attach optional AI group-review flags (from group_review.py), keyed by venue_id.
+    flags_by_venue = _load_group_flags(working_dir)
+    for gid, m in meta.items():
+        m["ai_flag"] = flags_by_venue.get(m["venue_id"])
+
     _CACHE[state] = {
         "groups": groups, "meta": meta, "records": records,
         "working_dir": working_dir, "edit_log": _load_edit_log(working_dir), "state": state,
@@ -154,6 +159,26 @@ def _load_edit_log(working_dir: str) -> list[dict]:
             **details,
         })
     return entries
+
+
+def _load_group_flags(working_dir: str) -> dict:
+    """Load optional AI group-review flags into {venue_id: {needs_review, confidence,
+    rationale}}. Returns {} if group_review.py hasn't been run for this state."""
+    path = os.path.join(working_dir, "group_flags.csv")
+    if not os.path.exists(path):
+        return {}
+    try:
+        df = pd.read_csv(path)
+    except (pd.errors.EmptyDataError, FileNotFoundError):
+        return {}
+    out = {}
+    for _, r in df.iterrows():
+        out[r["venue_id"]] = {
+            "needs_review": bool(r["needs_review"]),
+            "confidence": None if pd.isna(r.get("confidence")) else float(r["confidence"]),
+            "rationale": "" if pd.isna(r.get("rationale")) else str(r["rationale"]),
+        }
+    return out
 
 
 def _reviewed_memberships(cache) -> set:
@@ -254,6 +279,8 @@ def api_summary(code):
 
     reviewed_sets = _reviewed_memberships(cache)
     n_reviewed = sum(1 for gid in meta if _group_membership(cache, gid) in reviewed_sets)
+    n_ai_flagged = sum(1 for m in meta.values() if (m.get("ai_flag") or {}).get("needs_review"))
+    has_ai_review = any(m.get("ai_flag") is not None for m in meta.values())
     splits = sum(1 for e in cache["edit_log"] if e["action"] == "split")
     merges = sum(1 for e in cache["edit_log"] if e["action"] == "merge")
     reassigns = sum(1 for e in cache["edit_log"] if e["action"] == "reassign")
@@ -263,6 +290,7 @@ def api_summary(code):
         "multi_record": n_groups - n_singletons, "flagged": n_flagged, "method_counts": method_counts,
         "reviewed": n_reviewed, "splits": splits, "merges": merges, "reassigns": reassigns,
         "total_edits": splits + merges + reassigns,
+        "ai_flagged": n_ai_flagged, "has_ai_review": has_ai_review,
     })
 
 
@@ -284,6 +312,8 @@ def api_groups(code):
         gids = [g for g in gids if meta[g]["flags"]]
     elif filter_type == "dup_years":
         gids = [g for g in gids if _has_duplicate_years(cache, g)]
+    elif filter_type == "ai_flagged":
+        gids = [g for g in gids if (meta[g].get("ai_flag") or {}).get("needs_review")]
 
     if sort_by == "size":
         gids.sort(key=lambda g: -meta[g]["group_size"])
@@ -316,6 +346,7 @@ def api_groups(code):
             "flags": m["flags"], "year_range": year_range, "titles": list(titles)[:5],
             "cities": list(set(mm["city"] for mm in members if mm["city"])), "members": members,
             "reviewed": _group_membership(cache, gid) in reviewed_sets,
+            "ai_flag": m.get("ai_flag"),
         })
 
     return jsonify({

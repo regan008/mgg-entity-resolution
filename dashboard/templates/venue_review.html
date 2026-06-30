@@ -21,6 +21,17 @@
             <button class="sort-btn flex-1 text-xs font-label-caps py-1 rounded bg-primary text-white" data-sort="size">Size</button>
             <button class="sort-btn flex-1 text-xs font-label-caps py-1 rounded bg-surface-container-high" data-sort="flags">Flagged</button>
         </div>
+        <div class="p-2 flex gap-1 items-center border-b border-outline-variant">
+            <button class="filter-btn flex-1 text-xs font-label-caps py-1 rounded bg-primary text-white" data-filter="all">All</button>
+            <button class="filter-btn flex-1 text-xs font-label-caps py-1 rounded bg-surface-container-high" data-filter="ai_flagged" id="ai-filter-btn">AI Flagged <span id="ai-flag-count"></span></button>
+        </div>
+        <div class="p-2 border-b border-outline-variant">
+            <button id="ai-review-btn" class="w-full flex items-center justify-center gap-1 text-xs font-semibold bg-secondary-container/20 text-secondary border border-secondary/30 hover:bg-secondary-container/40 py-2 rounded">
+                <span class="material-symbols-outlined text-base">smart_toy</span> Run AI Group Review
+            </button>
+            <div id="ai-review-status" class="text-xs text-on-surface-variant mt-1"></div>
+            <pre id="ai-log" class="hidden mt-2 max-h-32 overflow-y-auto text-[10px] font-data-mono bg-surface-container-highest rounded p-2"></pre>
+        </div>
         <div id="merge-bar" class="hidden p-2 border-b border-outline-variant bg-secondary-container/10 flex items-center justify-between">
             <span class="text-xs font-data-mono" id="merge-count">0 selected</span>
             <button id="merge-btn" class="bg-secondary text-white px-3 py-1 rounded text-xs font-semibold">Merge Selected</button>
@@ -39,10 +50,12 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/jobs.js') }}"></script>
 <script>
 const STATE = "{{ state }}";
 let selectedGid = null;
 let currentSort = "size";
+let currentFilter = "all";
 let groupsCache = [];
 let totalGroupCount = 0;
 let mergeSelected = new Set();
@@ -60,9 +73,16 @@ function loadSummary() {
         .then((s) => {
             totalGroupCount = s.total_groups;
             document.getElementById("group-count").textContent = `${s.total_groups} TOTAL`;
+            const aiPart = s.has_ai_review ? ` · ${s.ai_flagged} AI-flagged` : "";
             document.getElementById("summary-line").textContent =
                 `${s.total_records} records · ${s.reviewed}/${s.total_groups} reviewed · ${s.total_edits} edits ` +
-                `(${s.splits}S / ${s.merges}M / ${s.reassigns}R)`;
+                `(${s.splits}S / ${s.merges}M / ${s.reassigns}R)${aiPart}`;
+            const cnt = document.getElementById("ai-flag-count");
+            if (cnt) cnt.textContent = s.has_ai_review ? `(${s.ai_flagged})` : "";
+            const statusEl = document.getElementById("ai-review-status");
+            if (statusEl && s.has_ai_review && !statusEl.dataset.running) {
+                statusEl.textContent = `${s.ai_flagged} of ${s.total_groups} groups flagged for review.`;
+            }
         });
 }
 
@@ -73,21 +93,25 @@ function updateMergeBar() {
 }
 
 function loadGroups() {
-    fetch(`/api/state/${STATE}/venues/groups?sort=${currentSort}&per_page=200`)
+    fetch(`/api/state/${STATE}/venues/groups?sort=${currentSort}&filter=${currentFilter}&per_page=200`)
         .then((r) => r.json())
         .then((data) => {
             groupsCache = data.groups;
             const list = document.getElementById("group-list");
             list.innerHTML = "";
+            if (!data.groups.length) {
+                list.innerHTML = `<div class="p-4 text-xs text-on-surface-variant italic">No groups match this filter.</div>`;
+            }
             for (const g of data.groups) {
                 const div = document.createElement("div");
                 div.className = `group-item p-3 border-b border-outline-variant cursor-pointer hover:bg-surface-container ${g.group_id === selectedGid ? 'bg-primary-container text-white' : ''}`;
                 div.dataset.gid = g.group_id;
                 const reviewMark = g.reviewed ? '<span class="material-symbols-outlined text-xs text-green-600" title="Reviewed — confirmed correct">check_circle</span>' : '';
+                const aiMark = (g.ai_flag && g.ai_flag.needs_review) ? '<span class="material-symbols-outlined text-xs text-secondary" title="AI flagged for review">smart_toy</span>' : '';
                 div.innerHTML = `
                     <div class="font-data-mono text-xs font-label-caps flex items-center gap-1">
                         <input type="checkbox" class="merge-check" data-gid="${g.group_id}" ${mergeSelected.has(g.group_id) ? 'checked' : ''} title="Select for merge">
-                        ${g.venue_id} ${reviewMark} ${g.flags ? '<span class="material-symbols-outlined text-xs text-secondary">flag</span>' : ''}
+                        ${g.venue_id} ${reviewMark} ${aiMark} ${g.flags ? '<span class="material-symbols-outlined text-xs text-secondary">flag</span>' : ''}
                     </div>
                     <div class="font-semibold text-sm truncate">${g.titles[0] || '(untitled)'}</div>
                     <div class="text-xs ${g.group_id === selectedGid ? 'text-white/70' : 'text-on-surface-variant'}">${g.group_size} Records, ${g.year_range}</div>
@@ -163,6 +187,12 @@ function renderDetail(g) {
         ${g.flags ? `<div class="bg-error-container text-on-error-container rounded-lg p-4 mb-4">
             <div class="font-bold flex items-center gap-2"><span class="material-symbols-outlined">report</span> Flagged</div>
             <div class="text-sm">${g.flags}</div>
+        </div>` : ""}
+
+        ${(g.ai_flag && g.ai_flag.needs_review) ? `<div class="bg-secondary-container/20 border border-secondary/30 text-on-surface rounded-lg p-4 mb-4">
+            <div class="font-bold flex items-center gap-2 text-secondary"><span class="material-symbols-outlined">smart_toy</span> AI flagged for review${g.ai_flag.confidence != null ? ` (confidence ${(g.ai_flag.confidence*100).toFixed(0)}%)` : ''}</div>
+            <div class="text-sm mt-1">${g.ai_flag.rationale || ''}</div>
+            <div class="text-xs text-on-surface-variant mt-2">Advisory only — the AI suggests a human look at this group. Use Split/Move/Merge if it's wrong, or Mark Reviewed if it's fine.</div>
         </div>` : ""}
 
         <div class="grid grid-cols-12 gap-6 mb-6">
@@ -289,6 +319,42 @@ document.querySelectorAll(".sort-btn").forEach((btn) => {
         document.querySelectorAll(".sort-btn").forEach((b) => b.className = "sort-btn flex-1 text-xs font-label-caps py-1 rounded bg-surface-container-high");
         btn.className = "sort-btn flex-1 text-xs font-label-caps py-1 rounded bg-primary text-white";
         loadGroups();
+    });
+});
+
+document.querySelectorAll(".filter-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+        currentFilter = btn.dataset.filter;
+        selectedGid = null;
+        document.querySelectorAll(".filter-btn").forEach((b) => {
+            b.classList.remove("bg-primary", "text-white");
+            b.classList.add("bg-surface-container-high");
+        });
+        btn.classList.remove("bg-surface-container-high");
+        btn.classList.add("bg-primary", "text-white");
+        loadGroups();
+    });
+});
+
+document.getElementById("ai-review-btn").addEventListener("click", () => {
+    if (!confirm(`Run AI group review for ${STATE}? This sends each multi-record group to Gemini and writes group_flags.csv. API cost is logged to api_calls.csv.`)) return;
+    const btn = document.getElementById("ai-review-btn");
+    const status = document.getElementById("ai-review-status");
+    const log = document.getElementById("ai-log");
+    btn.disabled = true;
+    status.dataset.running = "1";
+    status.textContent = "Running AI group review…";
+    log.classList.remove("hidden");
+    log.textContent = "";
+    runStage(STATE, "group_review", [], "ai-log", (result) => {
+        btn.disabled = false;
+        delete status.dataset.running;
+        if (result.status === "done") {
+            status.textContent = "AI review complete.";
+            loadSummary(); loadGroups();
+        } else {
+            status.textContent = "AI review failed — see log.";
+        }
     });
 });
 

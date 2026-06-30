@@ -112,6 +112,9 @@ SIGNAL_DISAGREE_ADDR_MAX = 0.50    # No strong address corroboration either
 MAX_GROUP_DISTANCE_KM = 50
 FLAG_CROSS_STATE = True
 
+# ── AI Group Review (optional, post-draft) ─────────────────────────────────
+GROUP_REVIEW_BATCH_SIZE = 10  # multi-record groups sent to Gemini per API call
+
 # ── QA & ID Assignment ────────────────────────────────────────────────────
 QA_SAMPLE_RATE = 0.05
 QA_AI_SAMPLE_RATE = 0.15

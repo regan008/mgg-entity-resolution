@@ -24,6 +24,7 @@ ALLOWED_SCRIPTS = {
     "review_merge": ("review.py", set()),
     "consolidate": ("consolidate.py", set()),
     "assign_draft": ("assign_ids.py", set()),
+    "group_review": ("group_review.py", set()),
     "assign_commit": ("assign_ids.py", {"--commit"}),
 }
 
