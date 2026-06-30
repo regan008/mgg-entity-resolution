@@ -26,6 +26,15 @@ venue_bp = Blueprint("venue", __name__)
 _CACHE: dict[str, dict] = {}
 
 
+def clear_cache(state: str | None = None):
+    """Drop the in-memory venue cache for a state (or all states). Called after a
+    reset so stale group data isn't served from a now-deleted draft CSV."""
+    if state is None:
+        _CACHE.clear()
+    else:
+        _CACHE.pop(state.upper(), None)
+
+
 def _safe(val):
     if pd.isna(val):
         return ""

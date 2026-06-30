@@ -139,6 +139,18 @@ def api_run_stage(code):
     return jsonify({"job_id": job_id, "status": "started"})
 
 
+@dashboard_bp.route("/api/state/<code>/reset", methods=["POST"])
+def api_reset_state(code):
+    """Delete all pipeline data for a state so it can be re-run from scratch."""
+    code = code.upper()
+    if jobs.get_job_for_state(code) is not None:
+        return jsonify({"error": "A job is running for this state. Wait for it to finish before resetting."}), 409
+    result = data.reset_state(code)
+    from routes.venue_routes import clear_cache
+    clear_cache(code)
+    return jsonify({"status": "reset", **result})
+
+
 @dashboard_bp.route("/api/jobs/<job_id>/log")
 def api_job_log(job_id):
     since = int(request.args.get("since", 0))

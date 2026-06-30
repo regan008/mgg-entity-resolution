@@ -204,6 +204,57 @@ def global_summary() -> dict:
     }
 
 
+def reset_state(state: str, drop_committed: bool = True) -> dict:
+    """
+    Delete all intermediate pipeline data for a state so it can be re-run from
+    scratch: every file in working/{state}/ (and the directory itself, so the
+    state drops off the map) plus, optionally, its committed venue_assignments
+    rows in mgg.db.
+
+    The cumulative cross-state logs (pipeline_stats.csv, api_calls.csv) are left
+    untouched — they are append-only history and a fresh run simply supersedes
+    a state's old rows.
+    """
+    state = state.upper()
+    removed_files = []
+    sdir = state_dir(state)
+    if os.path.isdir(sdir):
+        for name in sorted(os.listdir(sdir)):
+            fp = os.path.join(sdir, name)
+            if os.path.isfile(fp):
+                os.remove(fp)
+                removed_files.append(name)
+        try:
+            os.rmdir(sdir)  # only succeeds if now empty
+        except OSError:
+            pass
+
+    db_rows_deleted = 0
+    if drop_committed:
+        db_rows_deleted = _delete_committed(state)
+
+    return {"removed_files": removed_files, "db_rows_deleted": db_rows_deleted}
+
+
+def _delete_committed(state: str) -> int:
+    """Remove this state's rows from mgg.db venue_assignments. Returns rows deleted."""
+    import sqlite3
+    if not os.path.exists(config.DB_PATH):
+        return 0
+    conn = sqlite3.connect(config.DB_PATH)
+    try:
+        cur = conn.execute(
+            "DELETE FROM venue_assignments WHERE venue_id LIKE ?", (f"{state}-%",)
+        )
+        conn.commit()
+        return cur.rowcount
+    except sqlite3.OperationalError:
+        # venue_assignments table doesn't exist yet
+        return 0
+    finally:
+        conn.close()
+
+
 def stage_detail(state: str, stage_key: str) -> dict:
     """Pull pipeline_stats.csv metrics for one stage of one state."""
     tracker = StatsTracker()

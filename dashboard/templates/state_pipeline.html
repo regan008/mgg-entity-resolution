@@ -3,9 +3,14 @@
 {% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">{% endblock %}
 
 {% block content %}
-<header class="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-outline-variant px-8 py-4">
-    <div class="font-label-caps text-on-surface-variant">Pipeline &gt; {{ state }}</div>
-    <h1 class="font-display text-2xl font-bold">{{ state }} Pipeline</h1>
+<header class="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-outline-variant px-8 py-4 flex items-center justify-between">
+    <div>
+        <div class="font-label-caps text-on-surface-variant">Pipeline &gt; {{ state }}</div>
+        <h1 class="font-display text-2xl font-bold">{{ state }} Pipeline</h1>
+    </div>
+    <button id="reset-btn" class="flex items-center gap-1 text-sm font-semibold text-error border border-error/40 hover:bg-error-container px-3 py-2 rounded">
+        <span class="material-symbols-outlined text-base">delete_sweep</span> Reset State
+    </button>
 </header>
 
 <div class="p-8 max-w-page mx-auto w-full">
@@ -165,6 +170,21 @@ function loadDetail(stageKey) {
 
 document.querySelectorAll(".stage-node").forEach((btn) => {
     btn.addEventListener("click", () => loadDetail(btn.dataset.stage));
+});
+
+document.getElementById("reset-btn").addEventListener("click", () => {
+    const ok = prompt(`This deletes ALL pipeline data for ${STATE} — every working/${STATE}/ file and any committed venue IDs in the database — so you can re-run from scratch. This cannot be undone.\n\nType ${STATE} to confirm:`);
+    if (!ok || ok.trim().toUpperCase() !== STATE) { if (ok !== null) alert("Reset cancelled — confirmation did not match."); return; }
+    const btn = document.getElementById("reset-btn");
+    btn.disabled = true;
+    fetch(`/api/state/${STATE}/reset`, { method: "POST" })
+        .then((r) => r.json())
+        .then((res) => {
+            if (res.error) { alert(res.error); btn.disabled = false; return; }
+            alert(`${STATE} reset: ${res.removed_files.length} file(s) deleted, ${res.db_rows_deleted} database row(s) removed.`);
+            window.location.href = "/";
+        })
+        .catch(() => { alert("Reset failed."); btn.disabled = false; });
 });
 
 // Auto-load the next actionable stage on page load
