@@ -89,19 +89,23 @@ For each candidate pair below, determine whether the two records represent the S
 MATCH — these indicate the same venue:
 - Minor name variations: abbreviations, "The" prefix, apostrophe differences, spelling errors (e.g., "Blue Moon" vs "The Blue Moon")
 - Slight name evolution over years at the same address (e.g., "Joe's Bar" vs "Joe's Bar & Grill")
-- Same name with a minor address change (venue relocated nearby)
+- Same name with a minor address change (venue relocated nearby). For example, "Sara's Restaurant" at "123 Main St" in 1975 and 1976 that moves to "876 2nd Avenue" in 1977, 1978, and 1980 is still a match.
+- OCR and transcription artifacts: character substitutions, split words, or truncated names caused by scanning errors (e.g., "Mnroe's" for "Monroe's", "Th e Bar" for "The Bar") should be treated as the same name.
 
 NOT A MATCH — these are different venues even if the address is identical:
 - Completely different names at the same address in different years likely means the business changed hands or was replaced (e.g., "Yum-Yum Pan Asian Bistro" and "Square One" at the same address are two different businesses)
 - Same address in the SAME year with different names likely means separate businesses in the same building — a complex, different units, or co-located establishments (e.g., a bar and a bookstore in the same building)
-- Chain businesses: some venues (especially bookstores, bathhouses, adult theaters) operated multiple locations in the same city. Two records with the same chain name but different addresses are different locations, not the same venue
+- Chain businesses: some venues (especially bookstores, bathhouses, adult theaters) operated multiple locations in the same city. Two records with the same chain name but different addresses are different locations, not the same venue. For example, "Joe's Bookstore" may have two locations in 1975, one at "123 Main St" and one at "876 2nd Avenue" — these should be separate entities.
 - Generic venue types at the same address (e.g., "Restaurant" and "Bar") are likely different businesses sharing a building
-- The only exception to this is cruising areas which frequently will have descriptive titles that may change.
+- Sometimes an entity like a hotel will list both the hotel and the bar inside the hotel. Pay close attention to these — they should be separate entities.
+
 KEY PRINCIPLE: A shared address is NOT sufficient for a match. The names must be recognizably the same business. When names are completely different, default to NOT a match — even with the same address. Be conservative: when genuinely uncertain, say "uncertain".
 
 Additional context:
 - Different cities almost always means different venues
-- Description fields may contain phone numbers, hours, or location details that can help identify matches
+- Some records have Title: NA — this means the title was not transcribed, not that the venue has no name. When one record in a pair has Title: NA, weight the description and address fields more heavily and do not treat "NA" as a name to compare against.
+- Large year gaps (10+ years apart) should increase caution. The same name at the same address may represent a revival or coincidence rather than continuous operation — examine the description field carefully in these cases.
+- The description field may contain Damron's shorthand amenity codes (e.g., "D" for dancing, "RT" for restaurant, "AYOR" for at your own risk) — these are category tags, not descriptive text, and should not be used to infer venue similarity. Phone numbers and hours in the description can be useful for confirming a match.
 
 For each pair, return a JSON object with:
 - "pair_index": the pair number (starting from 0)
