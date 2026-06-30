@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}States Map | MGG Entity Resolution{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">{% endblock %}
+
+{% block content %}
+<header class="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-outline-variant px-8 py-4 flex items-center justify-between">
+    <div class="flex gap-10">
+        <div>
+            <div class="font-label-caps text-on-surface-variant">Total Records</div>
+            <div class="font-data-mono text-xl font-bold">{{ "{:,}".format(summary.total_records) }}</div>
+        </div>
+        <div>
+            <div class="font-label-caps text-on-surface-variant">Processed</div>
+            <div class="font-data-mono text-xl font-bold">{{ "{:,}".format(summary.processed_records) }}</div>
+        </div>
+        <div>
+            <div class="font-label-caps text-on-surface-variant">Unique Venues</div>
+            <div class="font-data-mono text-xl font-bold">{{ "{:,}".format(summary.unique_venues) }}</div>
+        </div>
+        <div>
+            <div class="font-label-caps text-on-surface-variant">States Complete</div>
+            <div class="font-data-mono text-xl font-bold">{{ summary.states_complete }} / {{ summary.states_total }}</div>
+        </div>
+    </div>
+    <form action="/state-redirect" method="get" class="flex items-center gap-2">
+        <input name="code" maxlength="2" placeholder="e.g. NE" required
+               class="font-data-mono uppercase border border-outline-variant rounded px-3 py-2 text-sm w-24"
+               oninput="this.value = this.value.toUpperCase()">
+        <button type="submit" class="bg-primary text-white px-4 py-2 rounded text-sm font-semibold flex items-center gap-1">
+            <span class="material-symbols-outlined" style="font-size:18px">add</span> Start New State
+        </button>
+    </form>
+</header>
+
+<div class="p-8 max-w-page mx-auto w-full">
+    <h1 class="font-display text-3xl font-bold mb-1">Pipeline Status</h1>
+    <p class="text-on-surface-variant mb-6">Brick-and-mortar venue resolution progress across all started states.</p>
+
+    <div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-6 mb-8">
+        <div class="flex items-center gap-6 mb-4 font-label-caps text-on-surface-variant">
+            <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-outline-variant"></span> Not Started</span>
+            <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-secondary-container"></span> In Progress</span>
+            <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-primary"></span> Committed</span>
+        </div>
+        <div class="grid grid-cols-8 sm:grid-cols-10 md:grid-cols-12 gap-2">
+            {% for s in states %}
+            <a href="{{ url_for('dashboard.state_pipeline', code=s.state) }}"
+               class="tile-state rounded-md aspect-square flex flex-col items-center justify-center text-xs font-bold
+                      {{ 'bg-primary text-white' if s.committed else ('bg-secondary-container text-white' if s.current_stage > 0 else 'bg-surface-container-high text-on-surface-variant') }}"
+               title="{{ s.state }}: {{ s.stage_label }} ({{ s.progress_pct }}%)">
+                {{ s.state }}
+            </a>
+            {% endfor %}
+            {% if not states %}
+            <div class="col-span-full text-on-surface-variant italic py-8 text-center">
+                No states started yet. Run preprocess.py on a state to begin.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden">
+        <div class="px-6 py-4 border-b border-outline-variant font-display text-lg font-bold">Recently Active States</div>
+        <table class="w-full text-sm">
+            <thead class="bg-surface-container-high font-label-caps text-on-surface-variant">
+                <tr>
+                    <th class="text-left px-6 py-3">Jurisdiction</th>
+                    <th class="text-left px-6 py-3">Last Update</th>
+                    <th class="text-left px-6 py-3">Current Stage</th>
+                    <th class="text-left px-6 py-3">Progress</th>
+                    <th class="text-right px-6 py-3">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in states %}
+                <tr class="border-t border-outline-variant hover:bg-surface-container/50">
+                    <td class="px-6 py-3 font-semibold">{{ s.state }} <span class="text-on-surface-variant font-normal">({{ "{:,}".format(s.record_count) }} records)</span></td>
+                    <td class="px-6 py-3 font-data-mono text-on-surface-variant">{{ s.last_update[:19].replace("T", " ") }}</td>
+                    <td class="px-6 py-3">
+                        <span class="font-label-caps px-2 py-1 rounded-full
+                            {{ 'bg-primary text-white' if s.committed else 'bg-secondary-container/20 text-secondary' }}">
+                            Stage {{ s.current_stage }}: {{ s.stage_label }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-3 w-48">
+                        <div class="w-full bg-surface-container-high rounded-full h-2">
+                            <div class="h-2 rounded-full {{ 'bg-primary' if s.committed else 'bg-secondary-container' }}" style="width: {{ s.progress_pct }}%"></div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-3 text-right">
+                        <a href="{{ url_for('dashboard.state_pipeline', code=s.state) }}" class="material-symbols-outlined text-on-surface-variant hover:text-primary">open_in_new</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden mt-8">
+        <div class="px-6 py-4 border-b border-outline-variant flex items-center justify-between">
+            <div class="font-display text-lg font-bold">Unprocessed States</div>
+            <div class="font-label-caps text-on-surface-variant">{{ unprocessed|length }} not yet started</div>
+        </div>
+        <table class="w-full text-sm">
+            <thead class="bg-surface-container-high font-label-caps text-on-surface-variant">
+                <tr>
+                    <th class="text-left px-6 py-3">Jurisdiction</th>
+                    <th class="text-right px-6 py-3">Brick-and-Mortar Records</th>
+                    <th class="text-right px-6 py-3">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in unprocessed %}
+                <tr class="border-t border-outline-variant hover:bg-surface-container/50">
+                    <td class="px-6 py-3 font-semibold">{{ s.state }}</td>
+                    <td class="px-6 py-3 font-data-mono text-right">{{ "{:,}".format(s.record_count) }}</td>
+                    <td class="px-6 py-3 text-right">
+                        <a href="{{ url_for('dashboard.state_pipeline', code=s.state) }}" class="text-primary text-xs font-semibold hover:underline">Start &rarr;</a>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not unprocessed %}
+                <tr><td colspan="3" class="px-6 py-8 text-center text-on-surface-variant italic">All states/territories in the database have been started.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

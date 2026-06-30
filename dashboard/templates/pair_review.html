@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+{% block title %}Pair Review: {{ state }} | MGG Entity Resolution{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">{% endblock %}
+
+{% block content %}
+<header class="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-outline-variant px-8 py-4 flex items-center justify-between">
+    <div>
+        <a href="{{ url_for('dashboard.state_pipeline', code=state) }}" class="font-label-caps text-on-surface-variant hover:text-primary">&larr; Exit to Pipeline</a>
+        <h1 class="font-display text-xl font-bold">{{ state }}: Pair Review</h1>
+    </div>
+    <button id="mode-toggle" class="bg-surface-container-high border border-outline-variant px-4 py-2 rounded text-sm font-semibold">
+        Switch to Bulk Review
+    </button>
+</header>
+
+<div class="flex-1 flex">
+    <!-- Main content -->
+    <div class="flex-1 p-8" id="main-content">
+        <!-- SINGLE MODE -->
+        <div id="single-mode">
+            <div id="ai-banner" class="bg-primary-container text-white rounded-lg p-4 mb-4 hidden">
+                <div class="font-semibold" id="ai-banner-decision"></div>
+                <div class="text-sm opacity-80" id="ai-banner-meta"></div>
+                <div class="text-sm italic mt-1" id="ai-banner-rationale"></div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-px bg-outline-variant rounded-lg overflow-hidden border border-outline-variant mb-4" id="record-grid">
+                <div class="bg-surface-container-lowest p-4" id="record-a"></div>
+                <div class="bg-surface-container-lowest p-4" id="record-b"></div>
+            </div>
+
+            <div class="flex gap-2 mb-6">
+                <div data-kbd="m" class="flex-1 bg-surface-container-lowest border border-outline-variant rounded p-3 text-center">
+                    <kbd class="font-data-mono font-bold">M</kbd> <span class="text-sm">Same Venue</span>
+                </div>
+                <div data-kbd="r" class="flex-1 bg-surface-container-lowest border border-outline-variant rounded p-3 text-center">
+                    <kbd class="font-data-mono font-bold">R</kbd> <span class="text-sm">Different</span>
+                </div>
+                <div data-kbd="s" class="flex-1 bg-surface-container-lowest border border-outline-variant rounded p-3 text-center">
+                    <kbd class="font-data-mono font-bold">S</kbd> <span class="text-sm">Skip</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- BULK MODE -->
+        <div id="bulk-mode" class="hidden">
+            <div class="flex items-center gap-3 mb-4 flex-wrap">
+                <span class="font-label-caps text-on-surface-variant">Filters:</span>
+                <select id="filter-confidence" class="border border-outline-variant rounded px-2 py-1 text-sm">
+                    <option value="">Confidence &gt; any</option>
+                    <option value="0.90">Confidence &gt; 0.90</option>
+                    <option value="0.95">Confidence &gt; 0.95</option>
+                </select>
+                <select id="filter-distance" class="border border-outline-variant rounded px-2 py-1 text-sm">
+                    <option value="">Distance: any</option>
+                    <option value="0.1">Distance &lt; 0.1km</option>
+                    <option value="0.5">Distance &lt; 0.5km</option>
+                </select>
+                <select id="filter-edge-case" class="border border-outline-variant rounded px-2 py-1 text-sm">
+                    <option value="all">Strategy: all</option>
+                    <option value="signal_disagreement">signal_disagreement</option>
+                    <option value="high_addr_low_name">high_addr_low_name</option>
+                    <option value="high_name_low_addr">high_name_low_addr</option>
+                </select>
+                <button id="apply-filters" class="text-sm text-primary font-semibold">Apply</button>
+            </div>
+
+            <div class="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden mb-4">
+                <table class="w-full text-sm">
+                    <thead class="bg-surface-container-high font-label-caps text-on-surface-variant">
+                        <tr>
+                            <th class="px-3 py-2"><input type="checkbox" id="select-all"></th>
+                            <th class="text-left px-3 py-2">Distance</th>
+                            <th class="text-left px-3 py-2">Record A</th>
+                            <th class="text-left px-3 py-2">Record B</th>
+                            <th class="text-left px-3 py-2">Gemini</th>
+                            <th class="text-left px-3 py-2">Similarity</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bulk-rows"></tbody>
+                </table>
+            </div>
+
+            <div class="flex gap-2">
+                <button id="bulk-confirm" class="bg-primary text-white px-4 py-2 rounded text-sm font-semibold">Confirm Selected as Matches (M)</button>
+                <button id="bulk-reject" class="bg-surface-container-high border border-outline-variant px-4 py-2 rounded text-sm font-semibold">Reject Selected (R)</button>
+                <span id="bulk-selection-count" class="self-center text-xs text-on-surface-variant font-data-mono"></span>
+                <span class="self-center text-xs text-on-surface-variant italic ml-auto">Tip: Shift+click a checkbox to select a range</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="w-sidebar-width border-l border-outline-variant p-6 space-y-4">
+        <div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-4">
+            <div class="font-label-caps text-on-surface-variant mb-2" id="distance-label">Spatial Proximity</div>
+            <div class="text-xs text-on-surface-variant" id="distance-value">—</div>
+        </div>
+        <div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-4">
+            <div class="font-label-caps text-on-surface-variant mb-1">Review Progress</div>
+            <div class="font-display text-2xl font-bold" id="progress-pct">0%</div>
+            <div class="font-data-mono text-xs text-on-surface-variant" id="progress-count">0 / 0</div>
+            <div class="w-full bg-surface-container-high rounded-full h-2 mt-2">
+                <div class="h-2 rounded-full bg-secondary-container" id="progress-bar" style="width:0%"></div>
+            </div>
+        </div>
+    </aside>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/keyboard.js') }}"></script>
+<script>
+const STATE = "{{ state }}";
+let currentIdx = 0;
+let bulkSelected = new Set();
+let bulkData = [];
+let lastCheckedIdx = null;
+
+function fmtRecord(rec, side) {
+    return `
+        <div class="font-label-caps text-on-surface-variant">${side} &middot; ID ${rec.id} ${rec.is_na_title ? '(NA-title)' : ''}</div>
+        <div class="font-display text-xl font-bold mt-1 diff-highlight inline-block px-1">${rec.title || '(no title)'}</div>
+        <div class="text-sm mt-1 diff-highlight inline-block px-1">${rec.street_address || ''}, ${rec.city || ''}</div>
+        <div class="font-data-mono text-sm mt-1 diff-highlight inline-block px-1">${rec.year || '—'}</div>
+        <div class="text-xs text-on-surface-variant mt-2">${(rec.types || []).join(', ')}</div>
+        <div class="text-xs text-on-surface-variant mt-1">${rec.description || ''}</div>
+    `;
+}
+
+function loadPair(idx) {
+    fetch(`/api/state/${STATE}/review/pair/${idx}`)
+        .then((r) => r.json())
+        .then((data) => {
+            if (data.error) { alert("No more pairs."); return; }
+            currentIdx = idx;
+            document.getElementById("record-a").innerHTML = fmtRecord(data.record_a, "Record A");
+            document.getElementById("record-b").innerHTML = fmtRecord(data.record_b, "Record B");
+
+            const banner = document.getElementById("ai-banner");
+            if (data.ai_decision) {
+                banner.classList.remove("hidden");
+                document.getElementById("ai-banner-decision").textContent =
+                    `Gemini says: ${data.ai_decision.toUpperCase()} (${data.ai_confidence != null ? data.ai_confidence.toFixed(2) : '—'} confidence)`;
+                document.getElementById("ai-banner-meta").textContent =
+                    `Distance: ${data.distance_km != null ? data.distance_km + ' km' : '—'} · Composite Score: ${data.scores.composite}`;
+                document.getElementById("ai-banner-rationale").textContent = data.ai_rationale || "";
+            } else {
+                banner.classList.add("hidden");
+            }
+
+            document.getElementById("distance-value").textContent =
+                data.distance_km != null ? `${data.distance_km} km between records` : "Coordinates unavailable";
+
+            loadStats();
+        });
+}
+
+function loadStats() {
+    fetch(`/api/state/${STATE}/review/stats`)
+        .then((r) => r.json())
+        .then((s) => {
+            const pct = s.total ? Math.round((s.reviewed / s.total) * 100) : 0;
+            document.getElementById("progress-pct").textContent = `${pct}%`;
+            document.getElementById("progress-count").textContent = `${s.reviewed} / ${s.total}`;
+            document.getElementById("progress-bar").style.width = `${pct}%`;
+        });
+}
+
+function decide(decision) {
+    fetch(`/api/state/${STATE}/review/pair/${currentIdx}`)
+        .then((r) => r.json())
+        .then((data) => {
+            fetch(`/api/state/${STATE}/review/decide`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id_a: data.id_a, id_b: data.id_b, decision }),
+            }).then(() => loadPair(currentIdx + 1));
+        });
+}
+
+window.onMatch = () => { if (!document.getElementById("bulk-mode").classList.contains("hidden")) { bulkAction("match"); } else { decide("match"); } };
+window.onReject = () => { if (!document.getElementById("bulk-mode").classList.contains("hidden")) { bulkAction("reject"); } else { decide("reject"); } };
+window.onSkip = () => decide("skip");
+
+// Bulk mode
+function loadBulk() {
+    const minConf = document.getElementById("filter-confidence").value;
+    const maxDist = document.getElementById("filter-distance").value;
+    const edgeCase = document.getElementById("filter-edge-case").value;
+    const params = new URLSearchParams({ per_page: 100 });
+    if (minConf) params.set("min_confidence", minConf);
+    if (maxDist) params.set("max_distance", maxDist);
+    if (edgeCase) params.set("edge_case", edgeCase);
+
+    fetch(`/api/state/${STATE}/review/pairs?${params}`)
+        .then((r) => r.json())
+        .then((data) => {
+            bulkData = data.pairs;
+            bulkSelected.clear();
+            const tbody = document.getElementById("bulk-rows");
+            tbody.innerHTML = "";
+            for (const p of data.pairs) {
+                const tr = document.createElement("tr");
+                tr.className = "border-t border-outline-variant";
+                tr.innerHTML = `
+                    <td class="px-3 py-2"><input type="checkbox" data-ida="${p.id_a}" data-idb="${p.id_b}" class="bulk-check"></td>
+                    <td class="px-3 py-2 font-data-mono">${p.distance_km != null ? p.distance_km + ' km' : '—'}</td>
+                    <td class="px-3 py-2">${p.record_a.title || '(no title)'}<div class="text-xs text-on-surface-variant">${p.record_a.street_address}</div></td>
+                    <td class="px-3 py-2">${p.record_b.title || '(no title)'}<div class="text-xs text-on-surface-variant">${p.record_b.street_address}</div></td>
+                    <td class="px-3 py-2"><span class="font-label-caps bg-primary-container text-white px-2 py-1 rounded">${(p.ai_decision || '?').toUpperCase()} ${p.ai_confidence != null ? p.ai_confidence.toFixed(2) : ''}</span></td>
+                    <td class="px-3 py-2 font-data-mono">${p.scores.composite}</td>
+                `;
+                tbody.appendChild(tr);
+            }
+            lastCheckedIdx = null;
+            const checks = Array.from(document.querySelectorAll(".bulk-check"));
+            checks.forEach((cb, idx) => {
+                cb.addEventListener("click", (e) => {
+                    if (e.shiftKey && lastCheckedIdx !== null) {
+                        const [start, end] = [lastCheckedIdx, idx].sort((a, b) => a - b);
+                        for (let i = start; i <= end; i++) {
+                            checks[i].checked = cb.checked;
+                            checks[i].dispatchEvent(new Event("change"));
+                        }
+                    }
+                    lastCheckedIdx = idx;
+                });
+                cb.addEventListener("change", () => {
+                    const key = `${cb.dataset.ida}-${cb.dataset.idb}`;
+                    if (cb.checked) bulkSelected.add(key); else bulkSelected.delete(key);
+                    updateSelectionCount();
+                });
+            });
+            updateSelectionCount();
+        });
+}
+
+function updateSelectionCount() {
+    const el = document.getElementById("bulk-selection-count");
+    if (el) el.textContent = bulkSelected.size ? `${bulkSelected.size} selected` : "";
+}
+
+function bulkAction(decision) {
+    const pairs = Array.from(bulkSelected).map((k) => {
+        const [id_a, id_b] = k.split("-");
+        return { id_a, id_b };
+    });
+    if (!pairs.length) { alert("No pairs selected."); return; }
+    fetch(`/api/state/${STATE}/review/decide_batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision, pairs }),
+    }).then(() => { loadBulk(); loadStats(); });
+}
+
+document.getElementById("mode-toggle").addEventListener("click", () => {
+    const single = document.getElementById("single-mode");
+    const bulk = document.getElementById("bulk-mode");
+    const toggling = single.classList.contains("hidden");
+    single.classList.toggle("hidden");
+    bulk.classList.toggle("hidden");
+    document.getElementById("mode-toggle").textContent = toggling ? "Switch to Bulk Review" : "Switch to Single Review";
+    if (!toggling) loadBulk();
+});
+document.getElementById("apply-filters").addEventListener("click", loadBulk);
+document.getElementById("select-all").addEventListener("change", (e) => {
+    document.querySelectorAll(".bulk-check").forEach((cb) => {
+        cb.checked = e.target.checked;
+        cb.dispatchEvent(new Event("change"));
+    });
+});
+document.getElementById("bulk-confirm").addEventListener("click", () => bulkAction("match"));
+document.getElementById("bulk-reject").addEventListener("click", () => bulkAction("reject"));
+
+loadPair(0);
+</script>
+{% endblock %}

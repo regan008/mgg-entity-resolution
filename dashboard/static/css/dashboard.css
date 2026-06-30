@@ -1,0 +1,25 @@
+/* Small overrides not worth inlining into every template's <style> block.
+   Most design tokens live in base.html's Tailwind config (single source of
+   truth so all 5 screens stay visually consistent). */
+
+.diff-highlight {
+    background-color: rgba(169, 55, 0, 0.08);
+}
+
+.log-panel {
+    background: #132330;
+    color: #d4e4f6;
+}
+
+.log-line-warn { color: #ffb59b; }
+.log-line-error { color: #ff8a80; }
+.log-line-info { color: #b8c8da; }
+
+.tile-state {
+    transition: transform 120ms ease, filter 120ms ease;
+}
+.tile-state:hover {
+    transform: scale(1.08);
+    filter: brightness(1.1);
+    cursor: pointer;
+}

@@ -7,3 +7,4 @@ pygeohash>=1.2
 google-genai>=1.0
 google-api-core>=2.0
 python-dotenv>=1.0
+flask>=2.0

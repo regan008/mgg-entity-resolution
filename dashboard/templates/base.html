@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>{% block title %}MGG Entity Resolution{% endblock %}</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+tailwind.config = {
+    darkMode: "class",
+    theme: {
+        extend: {
+            colors: {
+                "surface": "#fef9ef",
+                "surface-dim": "#dedad0",
+                "surface-bright": "#fef9ef",
+                "surface-container-lowest": "#ffffff",
+                "surface-container-low": "#f8f3e9",
+                "surface-container": "#f2ede3",
+                "surface-container-high": "#ece8de",
+                "surface-container-highest": "#e7e2d8",
+                "on-surface": "#1d1c16",
+                "on-surface-variant": "#44474e",
+                "inverse-surface": "#32302a",
+                "inverse-on-surface": "#f5f0e6",
+                "outline": "#74777f",
+                "outline-variant": "#c4c6cf",
+                "primary": "#000a1e",
+                "on-primary": "#ffffff",
+                "primary-container": "#002147",
+                "on-primary-container": "#708ab5",
+                "secondary": "#a93700",
+                "on-secondary": "#ffffff",
+                "secondary-container": "#fd6b31",
+                "on-secondary-container": "#5c1a00",
+                "tertiary": "#000c18",
+                "on-tertiary": "#ffffff",
+                "tertiary-container": "#132330",
+                "on-tertiary-container": "#7b8b9b",
+                "error": "#ba1a1a",
+                "on-error": "#ffffff",
+                "error-container": "#ffdad6",
+                "on-error-container": "#93000a",
+                "background": "#fef9ef",
+                "on-background": "#1d1c16",
+            },
+            fontFamily: {
+                "display": ["Playfair Display", "serif"],
+                "sans": ["Inter", "sans-serif"],
+                "mono": ["JetBrains Mono", "monospace"],
+            },
+            borderRadius: {
+                "sm": "0.125rem",
+                "DEFAULT": "0.25rem",
+                "md": "0.375rem",
+                "lg": "0.5rem",
+                "xl": "0.75rem",
+            },
+            width: { "sidebar-width": "280px" },
+            margin: { "sidebar-width": "280px" },
+            maxWidth: { "page": "1440px" },
+        }
+    }
+}
+</script>
+<style>
+    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; font-size: 20px; vertical-align: middle; }
+    .font-data-mono { font-family: 'JetBrains Mono', monospace; }
+    .font-label-caps { font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+    @keyframes step-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(253,107,49,0.4); } 50% { box-shadow: 0 0 0 6px rgba(253,107,49,0); } }
+    .step-pulse { animation: step-pulse 2s infinite; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #c4c6cf; border-radius: 9999px; }
+</style>
+{% block extra_head %}{% endblock %}
+</head>
+<body class="bg-background text-on-surface font-sans antialiased">
+<div class="flex min-h-screen">
+    <aside class="w-sidebar-width fixed left-0 top-0 h-screen bg-surface-container-lowest border-r border-outline-variant flex flex-col">
+        <div class="p-6 border-b border-outline-variant">
+            <a href="{{ url_for('dashboard.states_map') }}" class="block">
+                <div class="font-display text-xl font-bold leading-tight">MGG Entity<br/>Resolution</div>
+                <div class="font-label-caps text-on-surface-variant mt-1">Institutional Archive Pipeline</div>
+            </a>
+        </div>
+        <nav class="flex-1 p-4 space-y-1">
+            <a href="{{ url_for('dashboard.states_map') }}"
+               class="flex items-center gap-3 px-3 py-2 rounded {{ 'bg-primary-container text-white' if active_nav == 'states_map' else 'text-on-surface hover:bg-surface-container' }}">
+                <span class="material-symbols-outlined">map</span>
+                <span class="text-sm font-semibold">States Map</span>
+            </a>
+            {% if active_state %}
+            <a href="{{ url_for('dashboard.state_pipeline', code=active_state) }}"
+               class="flex items-center gap-3 px-3 py-2 rounded {{ 'bg-primary-container text-white' if active_nav == 'pipeline_view' else 'text-on-surface hover:bg-surface-container' }}">
+                <span class="material-symbols-outlined">linear_scale</span>
+                <span class="text-sm font-semibold">Pipeline View</span>
+            </a>
+            {% endif %}
+            <a href="{{ url_for('dashboard.costs') }}"
+               class="flex items-center gap-3 px-3 py-2 rounded {{ 'bg-primary-container text-white' if active_nav == 'costs' else 'text-on-surface hover:bg-surface-container' }}">
+                <span class="material-symbols-outlined">monitoring</span>
+                <span class="text-sm font-semibold">Stats &amp; Calibration</span>
+            </a>
+        </nav>
+        <div class="p-4 border-t border-outline-variant text-xs text-on-surface-variant space-y-1">
+            <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-secondary-container animate-pulse"></span>
+                System Online
+            </div>
+            <div>MGG Entity Resolution Dashboard v0.1</div>
+        </div>
+    </aside>
+    <main class="ml-sidebar-width flex-1 flex flex-col min-h-screen">
+        {% block content %}{% endblock %}
+    </main>
+</div>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}API Cost & Usage | MGG Entity Resolution{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">{% endblock %}
+
+{% block content %}
+<div class="p-8 max-w-page mx-auto w-full">
+    <h1 class="font-display text-3xl font-bold mb-1">API Cost &amp; Usage Analysis</h1>
+    <p class="text-on-surface-variant mb-6">Gemini Flash Lite compute expenditure across all states adjudicated so far.</p>
+
+    <div class="grid grid-cols-4 gap-4 mb-8">
+        <div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-5 relative overflow-hidden">
+            <div class="font-label-caps text-on-surface-variant">Total Cumulative Cost</div>
+            <div class="font-display text-2xl font-bold mt-1">${{ "%.4f"|format(total_cost) }}</div>
+        </div>
+        <div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-5">
+            <div class="font-label-caps text-on-surface-variant">Avg. Cost Per Call</div>
+            <div class="font-display text-2xl font-bold mt-1">${{ "%.6f"|format(avg_cost) }}</div>
+        </div>
+        <div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-5">
+            <div class="font-label-caps text-on-surface-variant">Tokens Processed</div>
+            <div class="font-display text-2xl font-bold mt-1">{{ "{:,}".format(total_input + total_output) }}</div>
+            <div class="text-xs text-on-surface-variant mt-1">
+                {{ ((total_input / (total_input + total_output) * 100)|round|int) if (total_input + total_output) else 0 }}% input /
+                {{ ((total_output / (total_input + total_output) * 100)|round|int) if (total_input + total_output) else 0 }}% output
+            </div>
+        </div>
+        <div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-5">
+            <div class="font-label-caps text-on-surface-variant">Active Model</div>
+            <div class="font-display text-xl font-bold mt-1">{{ active_model }}</div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-6 mb-8">
+        <div class="col-span-2 bg-surface-container-lowest border border-outline-variant rounded-lg p-6">
+            <div class="font-display text-lg font-bold mb-4">Cost Accumulation Trend (by day)</div>
+            <div class="flex items-end gap-3 h-40">
+                {% set max_cost = (daily.values()|list|max) if daily else 1 %}
+                {% for day, cost in daily.items() %}
+                <div class="flex-1 flex flex-col items-center justify-end h-full" title="{{ day }}: ${{ '%.4f'|format(cost) }}">
+                    <div class="w-full bg-secondary-container rounded-t" style="height: {{ (cost / max_cost * 100) if max_cost else 0 }}%"></div>
+                    <div class="font-label-caps text-on-surface-variant mt-2">{{ day[5:] }}</div>
+                </div>
+                {% endfor %}
+                {% if not daily %}
+                <div class="text-on-surface-variant italic">No API calls logged yet.</div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-6">
+            <div class="font-display text-lg font-bold mb-4">Cost by State</div>
+            <div class="space-y-2">
+                {% for s, cost in by_state.items() %}
+                <div class="flex justify-between text-sm">
+                    <span class="font-semibold">{{ s }}</span>
+                    <span class="font-data-mono">${{ "%.4f"|format(cost) }}</span>
+                </div>
+                {% endfor %}
+                {% if not by_state %}
+                <div class="text-on-surface-variant italic text-sm">No data yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden mb-8">
+        <div class="px-6 py-4 border-b border-outline-variant font-display text-lg font-bold">Transaction Ledger (Last 50 Events)</div>
+        <table class="w-full text-sm">
+            <thead class="bg-surface-container-high font-label-caps text-on-surface-variant">
+                <tr>
+                    <th class="text-left px-4 py-3">Timestamp</th>
+                    <th class="text-left px-4 py-3">State</th>
+                    <th class="text-left px-4 py-3">Model</th>
+                    <th class="text-right px-4 py-3">Input</th>
+                    <th class="text-right px-4 py-3">Output</th>
+                    <th class="text-right px-4 py-3">Total</th>
+                    <th class="text-right px-4 py-3">Cost (USD)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in ledger %}
+                <tr class="border-t border-outline-variant hover:bg-surface-container/50">
+                    <td class="px-4 py-2 font-data-mono text-on-surface-variant text-xs">{{ row.timestamp[:19] }}</td>
+                    <td class="px-4 py-2"><span class="font-label-caps bg-primary/10 px-2 py-1 rounded">{{ row.state }}</span></td>
+                    <td class="px-4 py-2 font-data-mono text-xs">{{ row.model }}</td>
+                    <td class="px-4 py-2 font-data-mono text-right">{{ "{:,}".format(row.input_tokens) }}</td>
+                    <td class="px-4 py-2 font-data-mono text-right">{{ "{:,}".format(row.output_tokens) }}</td>
+                    <td class="px-4 py-2 font-data-mono text-right">{{ "{:,}".format(row.total_tokens) }}</td>
+                    <td class="px-4 py-2 font-data-mono text-right font-bold text-secondary">${{ "%.6f"|format(row.total_cost_usd) }}</td>
+                </tr>
+                {% endfor %}
+                {% if not ledger %}
+                <tr><td colspan="7" class="px-4 py-8 text-center text-on-surface-variant italic">No API calls logged yet.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+        <div class="px-6 py-3 text-xs text-on-surface-variant border-t border-outline-variant">
+            Showing {{ ledger|length }} of {{ total_calls }} calls
+        </div>
+    </div>
+
+    <div class="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden">
+        <div class="px-6 py-4 border-b border-outline-variant font-display text-lg font-bold">Pipeline Stats (raw)</div>
+        <table class="w-full text-sm">
+            <thead class="bg-surface-container-high font-label-caps text-on-surface-variant">
+                <tr>
+                    <th class="text-left px-4 py-3">State</th>
+                    <th class="text-left px-4 py-3">Stage</th>
+                    <th class="text-left px-4 py-3">Metric</th>
+                    <th class="text-right px-4 py-3">Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in stats_rows[-50:] %}
+                <tr class="border-t border-outline-variant">
+                    <td class="px-4 py-2">{{ row.state }}</td>
+                    <td class="px-4 py-2">{{ row.stage }}</td>
+                    <td class="px-4 py-2 font-data-mono text-xs">{{ row.metric_name }}</td>
+                    <td class="px-4 py-2 font-data-mono text-right">{{ row.metric_value }}</td>
+                </tr>
+                {% endfor %}
+                {% if not stats_rows %}
+                <tr><td colspan="4" class="px-4 py-8 text-center text-on-surface-variant italic">No pipeline stats recorded yet.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
