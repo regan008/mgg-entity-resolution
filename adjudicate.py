@@ -250,6 +250,12 @@ def adjudicate_state(state: str, skip_ai: bool = False,
         scored_df["ai_rationale"] = ""
         scored_df["needs_human_review"] = False
         scored_df["human_review_reason"] = ""
+    else:
+        # When resuming, ensure string columns have the right dtype
+        # (loading from CSV may infer them as float/numeric if they had NaN/empty values)
+        for col in ["decision", "method", "ai_rationale", "human_review_reason"]:
+            if col in scored_df.columns:
+                scored_df[col] = scored_df[col].astype(str).replace("nan", "")
     # Pre-compute NA-title flag for each pair
     def _has_na_title(row):
         id_a, id_b = int(row["id_a"]), int(row["id_b"])
