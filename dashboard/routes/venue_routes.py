@@ -112,9 +112,57 @@ def _load_state(state: str, force: bool = False) -> dict:
 
     _CACHE[state] = {
         "groups": groups, "meta": meta, "records": records,
-        "working_dir": working_dir, "edit_log": [], "state": state,
+        "working_dir": working_dir, "edit_log": _load_edit_log(working_dir), "state": state,
     }
     return _CACHE[state]
+
+
+def _load_edit_log(working_dir: str) -> list[dict]:
+    """
+    Reconstruct the edit log from venue_edit_log.csv so the running edit/accuracy
+    tally survives a server restart. Without this, the in-memory edit_log starts
+    empty on every cache load and the stats recorded at approve time would only
+    reflect edits made since the last restart.
+    """
+    log_path = os.path.join(working_dir, "venue_edit_log.csv")
+    if not os.path.exists(log_path):
+        return []
+    try:
+        df = pd.read_csv(log_path)
+    except (pd.errors.EmptyDataError, FileNotFoundError):
+        return []
+    entries = []
+    for _, row in df.iterrows():
+        details = {}
+        if "details" in row and pd.notna(row["details"]):
+            try:
+                details = json.loads(row["details"])
+            except (json.JSONDecodeError, TypeError):
+                details = {}
+        entries.append({
+            "timestamp": row["timestamp"] if pd.notna(row.get("timestamp")) else "",
+            "action": row["action"] if pd.notna(row.get("action")) else "",
+            **details,
+        })
+    return entries
+
+
+def _reviewed_memberships(cache) -> set:
+    """
+    Set of frozensets of member IDs that have been explicitly marked reviewed-correct.
+    A group counts as reviewed only while its current membership exactly matches a
+    review-log entry — so any later split/merge/reassign of that group automatically
+    clears its reviewed status, forcing re-confirmation.
+    """
+    out = set()
+    for e in cache["edit_log"]:
+        if e["action"] == "review" and e.get("member_ids"):
+            out.add(frozenset(int(x) for x in e["member_ids"]))
+    return out
+
+
+def _group_membership(cache, gid) -> frozenset:
+    return frozenset(m["id"] for m in cache["groups"].get(gid, []))
 
 
 def _has_duplicate_years(cache, gid):
@@ -194,9 +242,18 @@ def api_summary(code):
     method_counts = {}
     for m in meta.values():
         method_counts[m["resolution_method"]] = method_counts.get(m["resolution_method"], 0) + 1
+
+    reviewed_sets = _reviewed_memberships(cache)
+    n_reviewed = sum(1 for gid in meta if _group_membership(cache, gid) in reviewed_sets)
+    splits = sum(1 for e in cache["edit_log"] if e["action"] == "split")
+    merges = sum(1 for e in cache["edit_log"] if e["action"] == "merge")
+    reassigns = sum(1 for e in cache["edit_log"] if e["action"] == "reassign")
+
     return jsonify({
         "total_groups": n_groups, "total_records": n_records, "singletons": n_singletons,
         "multi_record": n_groups - n_singletons, "flagged": n_flagged, "method_counts": method_counts,
+        "reviewed": n_reviewed, "splits": splits, "merges": merges, "reassigns": reassigns,
+        "total_edits": splits + merges + reassigns,
     })
 
 
@@ -231,6 +288,7 @@ def api_groups(code):
     total = len(gids)
     page_gids = gids[page * per_page:(page + 1) * per_page]
 
+    reviewed_sets = _reviewed_memberships(cache)
     groups_out = []
     for gid in page_gids:
         m = meta[gid]
@@ -248,6 +306,7 @@ def api_groups(code):
             "resolution_method": m["resolution_method"], "min_composite_score": m["min_composite_score"],
             "flags": m["flags"], "year_range": year_range, "titles": list(titles)[:5],
             "cities": list(set(mm["city"] for mm in members if mm["city"])), "members": members,
+            "reviewed": _group_membership(cache, gid) in reviewed_sets,
         })
 
     return jsonify({
@@ -358,6 +417,22 @@ def api_reassign(code):
     return jsonify({"status": "reassigned", "record_id": record_id})
 
 
+@venue_bp.route("/api/state/<code>/venues/review", methods=["POST"])
+def api_review(code):
+    """Mark a single group as reviewed-and-correct (no edit needed)."""
+    cache = _load_state(code.upper())
+    data = request.json
+    gid = int(data["group_id"])
+    if gid not in cache["groups"]:
+        return jsonify({"error": "Group not found"}), 404
+    member_ids = sorted(m["id"] for m in cache["groups"][gid])
+    _log_edit(cache, "review", {
+        "group_id": gid, "venue_id": cache["meta"][gid]["venue_id"],
+        "member_ids": member_ids, "notes": data.get("notes", ""),
+    })
+    return jsonify({"status": "reviewed", "group_id": gid, "venue_id": cache["meta"][gid]["venue_id"]})
+
+
 @venue_bp.route("/api/state/<code>/venues/approve", methods=["POST"])
 def api_approve(code):
     cache = _load_state(code.upper())
@@ -365,11 +440,18 @@ def api_approve(code):
     draft_path = os.path.join(cache["working_dir"], "venue_assignments_draft.csv")
     approved_path = os.path.join(cache["working_dir"], "venue_assignments_approved.csv")
     shutil.copy2(draft_path, approved_path)
+    reviewed_sets = _reviewed_memberships(cache)
+    n_reviewed = sum(1 for gid in cache["meta"] if _group_membership(cache, gid) in reviewed_sets)
+    _log_edit(cache, "approve", {
+        "total_groups": len(cache["meta"]),
+        "total_records": sum(m["group_size"] for m in cache["meta"].values()),
+        "groups_reviewed": n_reviewed,
+    })
     _record_venue_accuracy(cache)
     return jsonify({
         "status": "approved",
         "message": f"Approved. You can now commit on the Pipeline View.",
-        "edits_made": len(cache["edit_log"]),
+        "edits_made": sum(1 for e in cache["edit_log"] if e["action"] in ("split", "merge", "reassign")),
     })
 
 
@@ -401,9 +483,13 @@ def _record_venue_accuracy(cache):
     groups_correct = original_groups - groups_needing_correction
     accuracy = groups_correct / original_groups if original_groups > 0 else 1.0
 
+    reviewed_sets = _reviewed_memberships(cache)
+    groups_reviewed = sum(1 for gid in cache["meta"] if _group_membership(cache, gid) in reviewed_sets)
+
     StatsTracker().record(cache["state"], "venue_review", {
         "original_groups": original_groups, "final_groups": len(cache["meta"]),
-        "total_edits": len(cache["edit_log"]), "splits": splits, "merges": merges, "reassigns": reassigns,
+        "total_edits": splits + merges + reassigns, "splits": splits, "merges": merges, "reassigns": reassigns,
         "groups_needing_correction": groups_needing_correction, "groups_correct": groups_correct,
+        "groups_reviewed_confirmed": groups_reviewed,
         "venue_assignment_accuracy": round(accuracy, 4),
     })

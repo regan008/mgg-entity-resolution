@@ -21,10 +21,14 @@
             <button class="sort-btn flex-1 text-xs font-label-caps py-1 rounded bg-primary text-white" data-sort="size">Size</button>
             <button class="sort-btn flex-1 text-xs font-label-caps py-1 rounded bg-surface-container-high" data-sort="flags">Flagged</button>
         </div>
+        <div id="merge-bar" class="hidden p-2 border-b border-outline-variant bg-secondary-container/10 flex items-center justify-between">
+            <span class="text-xs font-data-mono" id="merge-count">0 selected</span>
+            <button id="merge-btn" class="bg-secondary text-white px-3 py-1 rounded text-xs font-semibold">Merge Selected</button>
+        </div>
         <div class="flex-1 overflow-y-auto" id="group-list"></div>
         <div class="p-3 border-t border-outline-variant">
             <button id="approve-btn" class="w-full bg-primary text-white px-4 py-2 rounded text-sm font-semibold">Approve All Groups for {{ state }}</button>
-            <p class="text-xs text-on-surface-variant mt-2">Approves every group currently in the list above — not just the one you're viewing.</p>
+            <p class="text-xs text-on-surface-variant mt-2">Approves every group currently in the list above — not just the one you're viewing. Split/merge/reassign edits and review confirmations are logged to <span class="font-data-mono">venue_edit_log.csv</span>.</p>
         </div>
     </aside>
 
@@ -41,6 +45,7 @@ let selectedGid = null;
 let currentSort = "size";
 let groupsCache = [];
 let totalGroupCount = 0;
+let mergeSelected = new Set();
 
 document.getElementById("approve-btn").addEventListener("click", () => {
     if (!confirm(`Approve all ${totalGroupCount} venue groups for ${STATE}? This prepares the entire state for commit — not just the group you're viewing.`)) return;
@@ -56,8 +61,15 @@ function loadSummary() {
             totalGroupCount = s.total_groups;
             document.getElementById("group-count").textContent = `${s.total_groups} TOTAL`;
             document.getElementById("summary-line").textContent =
-                `${s.total_records} records · ${s.singletons} singletons · ${s.flagged} flagged`;
+                `${s.total_records} records · ${s.reviewed}/${s.total_groups} reviewed · ${s.total_edits} edits ` +
+                `(${s.splits}S / ${s.merges}M / ${s.reassigns}R)`;
         });
+}
+
+function updateMergeBar() {
+    const bar = document.getElementById("merge-bar");
+    document.getElementById("merge-count").textContent = `${mergeSelected.size} selected`;
+    bar.classList.toggle("hidden", mergeSelected.size < 2);
 }
 
 function loadGroups() {
@@ -71,16 +83,27 @@ function loadGroups() {
                 const div = document.createElement("div");
                 div.className = `group-item p-3 border-b border-outline-variant cursor-pointer hover:bg-surface-container ${g.group_id === selectedGid ? 'bg-primary-container text-white' : ''}`;
                 div.dataset.gid = g.group_id;
+                const reviewMark = g.reviewed ? '<span class="material-symbols-outlined text-xs text-green-600" title="Reviewed — confirmed correct">check_circle</span>' : '';
                 div.innerHTML = `
                     <div class="font-data-mono text-xs font-label-caps flex items-center gap-1">
-                        ${g.venue_id} ${g.flags ? '<span class="material-symbols-outlined text-xs text-secondary">flag</span>' : ''}
+                        <input type="checkbox" class="merge-check" data-gid="${g.group_id}" ${mergeSelected.has(g.group_id) ? 'checked' : ''} title="Select for merge">
+                        ${g.venue_id} ${reviewMark} ${g.flags ? '<span class="material-symbols-outlined text-xs text-secondary">flag</span>' : ''}
                     </div>
                     <div class="font-semibold text-sm truncate">${g.titles[0] || '(untitled)'}</div>
                     <div class="text-xs ${g.group_id === selectedGid ? 'text-white/70' : 'text-on-surface-variant'}">${g.group_size} Records, ${g.year_range}</div>
                 `;
-                div.addEventListener("click", () => selectGroup(g.group_id));
+                div.addEventListener("click", (e) => {
+                    if (e.target.classList.contains("merge-check")) return;
+                    selectGroup(g.group_id);
+                });
+                div.querySelector(".merge-check").addEventListener("change", (e) => {
+                    const gid = parseInt(e.target.dataset.gid);
+                    if (e.target.checked) mergeSelected.add(gid); else mergeSelected.delete(gid);
+                    updateMergeBar();
+                });
                 list.appendChild(div);
             }
+            updateMergeBar();
             if (selectedGid === null && data.groups.length) selectGroup(data.groups[0].group_id);
         });
 }
@@ -116,6 +139,7 @@ function renderDetail(g) {
             <td class="px-3 py-2">${m.is_na_title ? `[NA: ${(m.description||'').slice(0,30)}]` : m.title}</td>
             <td class="px-3 py-2">${m.street_address || ''}, ${m.city || ''}</td>
             <td class="px-3 py-2 font-data-mono">${m.year || '—'}</td>
+            <td class="px-3 py-2"><button class="move-btn text-xs text-secondary hover:underline" data-id="${m.id}">Move…</button></td>
             <td class="px-3 py-2"><input type="checkbox" class="member-check" data-id="${m.id}"></td>
         </tr>
     `).join("");
@@ -131,6 +155,7 @@ function renderDetail(g) {
                 <p class="text-on-surface-variant italic text-sm">Resolved from ${g.group_size} records (${g.year_range}). Method: ${g.resolution_method}.</p>
             </div>
             <div class="flex gap-2">
+                <button id="review-btn" class="px-4 py-2 rounded text-sm font-semibold ${g.reviewed ? 'bg-green-600 text-white' : 'bg-surface-container-high border border-outline-variant'}">${g.reviewed ? '✓ Reviewed' : 'Mark Reviewed'} <kbd class="ml-1 text-xs opacity-60">R</kbd></button>
                 <button id="split-btn" class="bg-surface-container-high border border-outline-variant px-4 py-2 rounded text-sm font-semibold">Split Selected</button>
             </div>
         </div>
@@ -155,7 +180,8 @@ function renderDetail(g) {
                         <th class="text-left px-3 py-2">Title</th>
                         <th class="text-left px-3 py-2">Address</th>
                         <th class="text-left px-3 py-2">Year</th>
-                        <th class="text-left px-3 py-2">Select</th>
+                        <th class="text-left px-3 py-2">Move</th>
+                        <th class="text-left px-3 py-2">Split</th>
                     </tr>
                 </thead>
                 <tbody>${memberRows}</tbody>
@@ -166,9 +192,10 @@ function renderDetail(g) {
     document.getElementById("split-btn").addEventListener("click", () => {
         const ids = Array.from(document.querySelectorAll(".member-check:checked")).map((c) => parseInt(c.dataset.id));
         if (!ids.length) { alert("Select records to split out first."); return; }
+        const notes = prompt("Optional note for this split (why are these records a different venue?):", "") || "";
         fetch(`/api/state/${STATE}/venues/split`, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ group_id: g.group_id, record_ids: ids }),
+            body: JSON.stringify({ group_id: g.group_id, record_ids: ids, notes }),
         }).then((r) => r.json()).then((res) => {
             if (res.error) { alert(res.error); return; }
             selectedGid = null;
@@ -176,7 +203,85 @@ function renderDetail(g) {
         });
     });
 
+    document.getElementById("review-btn").addEventListener("click", () => {
+        fetch(`/api/state/${STATE}/venues/review`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ group_id: g.group_id }),
+        }).then((r) => r.json()).then((res) => {
+            if (res.error) { alert(res.error); return; }
+            loadSummary(); loadGroups();
+        });
+    });
+
+    document.querySelectorAll(".move-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const recordId = parseInt(btn.dataset.id);
+            const member = members.find((m) => m.id === recordId);
+            const label = member ? (member.is_na_title ? `[NA] ${(member.description||'').slice(0,30)}` : member.title) : recordId;
+            openMoveModal(recordId, label, g.group_id);
+        });
+    });
+
 }
+
+function openMoveModal(recordId, recordLabel, sourceGid) {
+    const others = groupsCache.filter((x) => x.group_id !== sourceGid)
+        .sort((a, b) => a.venue_id.localeCompare(b.venue_id));
+    const options = others.map((x) =>
+        `<option value="${x.group_id}">${x.venue_id} — ${(x.titles[0] || '(untitled)')} (${x.group_size} rec)</option>`
+    ).join("");
+
+    const overlay = document.createElement("div");
+    overlay.className = "fixed inset-0 bg-black/40 flex items-center justify-center z-50";
+    overlay.innerHTML = `
+        <div class="bg-surface-container-lowest rounded-lg shadow-xl w-[480px] max-w-[90vw] p-5">
+            <h3 class="font-display text-lg font-bold mb-1">Move Record</h3>
+            <p class="text-sm text-on-surface-variant mb-4">Moving <span class="font-semibold">${recordLabel}</span> (ID ${recordId}) to another venue group.</p>
+            <label class="font-label-caps text-on-surface-variant block mb-1">Destination venue</label>
+            <select id="move-target" class="w-full border border-outline-variant rounded px-3 py-2 mb-4 bg-surface-container-lowest text-sm">${options}</select>
+            <label class="font-label-caps text-on-surface-variant block mb-1">Note (optional)</label>
+            <input id="move-notes" type="text" class="w-full border border-outline-variant rounded px-3 py-2 mb-4 text-sm" placeholder="Why does this record belong there?">
+            <div class="flex justify-end gap-2">
+                <button id="move-cancel" class="px-4 py-2 rounded text-sm font-semibold bg-surface-container-high border border-outline-variant">Cancel</button>
+                <button id="move-confirm" class="px-4 py-2 rounded text-sm font-semibold bg-secondary text-white">Move</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+
+    const close = () => overlay.remove();
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector("#move-cancel").addEventListener("click", close);
+    overlay.querySelector("#move-confirm").addEventListener("click", () => {
+        const targetGid = parseInt(overlay.querySelector("#move-target").value);
+        const notes = overlay.querySelector("#move-notes").value || "";
+        fetch(`/api/state/${STATE}/venues/reassign`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ record_id: recordId, source_group_id: sourceGid, target_group_id: targetGid, notes }),
+        }).then((r) => r.json()).then((res) => {
+            if (res.error) { alert(res.error); return; }
+            close();
+            selectedGid = null;
+            loadSummary(); loadGroups();
+        });
+    });
+}
+
+document.getElementById("merge-btn").addEventListener("click", () => {
+    const ids = Array.from(mergeSelected);
+    if (ids.length < 2) { alert("Select at least 2 groups to merge."); return; }
+    const venueIds = ids.map((gid) => (groupsCache.find((x) => x.group_id === gid) || {}).venue_id).filter(Boolean);
+    if (!confirm(`Merge these ${ids.length} groups into one venue?\n\n${venueIds.join(", ")}`)) return;
+    const notes = prompt("Optional note for this merge (why are these the same venue?):", "") || "";
+    fetch(`/api/state/${STATE}/venues/merge`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ group_ids: ids, notes }),
+    }).then((r) => r.json()).then((res) => {
+        if (res.error) { alert(res.error); return; }
+        mergeSelected.clear();
+        selectedGid = null;
+        loadSummary(); loadGroups();
+    });
+});
 
 document.querySelectorAll(".sort-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -185,6 +290,15 @@ document.querySelectorAll(".sort-btn").forEach((btn) => {
         btn.className = "sort-btn flex-1 text-xs font-label-caps py-1 rounded bg-primary text-white";
         loadGroups();
     });
+});
+
+document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key.toLowerCase() === "r") {
+        const btn = document.getElementById("review-btn");
+        if (btn) { e.preventDefault(); btn.click(); }
+    }
 });
 
 loadSummary();
