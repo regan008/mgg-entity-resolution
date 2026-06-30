@@ -84,6 +84,8 @@
             <div class="flex gap-2">
                 <button id="bulk-confirm" class="bg-primary text-white px-4 py-2 rounded text-sm font-semibold">Confirm Selected as Matches (M)</button>
                 <button id="bulk-reject" class="bg-surface-container-high border border-outline-variant px-4 py-2 rounded text-sm font-semibold">Reject Selected (R)</button>
+                <span id="bulk-selection-count" class="self-center text-xs text-on-surface-variant font-data-mono"></span>
+                <span class="self-center text-xs text-on-surface-variant italic ml-auto">Tip: Shift+click a checkbox to select a range</span>
             </div>
         </div>
     </div>
@@ -113,6 +115,7 @@ const STATE = "{{ state }}";
 let currentIdx = 0;
 let bulkSelected = new Set();
 let bulkData = [];
+let lastCheckedIdx = null;
 
 function fmtRecord(rec, side) {
     return `
@@ -210,13 +213,32 @@ function loadBulk() {
                 `;
                 tbody.appendChild(tr);
             }
-            document.querySelectorAll(".bulk-check").forEach((cb) => {
+            lastCheckedIdx = null;
+            const checks = Array.from(document.querySelectorAll(".bulk-check"));
+            checks.forEach((cb, idx) => {
+                cb.addEventListener("click", (e) => {
+                    if (e.shiftKey && lastCheckedIdx !== null) {
+                        const [start, end] = [lastCheckedIdx, idx].sort((a, b) => a - b);
+                        for (let i = start; i <= end; i++) {
+                            checks[i].checked = cb.checked;
+                            checks[i].dispatchEvent(new Event("change"));
+                        }
+                    }
+                    lastCheckedIdx = idx;
+                });
                 cb.addEventListener("change", () => {
                     const key = `${cb.dataset.ida}-${cb.dataset.idb}`;
                     if (cb.checked) bulkSelected.add(key); else bulkSelected.delete(key);
+                    updateSelectionCount();
                 });
             });
+            updateSelectionCount();
         });
+}
+
+function updateSelectionCount() {
+    const el = document.getElementById("bulk-selection-count");
+    if (el) el.textContent = bulkSelected.size ? `${bulkSelected.size} selected` : "";
 }
 
 function bulkAction(decision) {
