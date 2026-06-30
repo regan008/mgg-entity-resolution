@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}{{ state }} Pipeline | MGG Entity Resolution{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">{% endblock %}
+
+{% block content %}
+<header class="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-outline-variant px-8 py-4">
+    <div class="font-label-caps text-on-surface-variant">Pipeline &gt; {{ state }}</div>
+    <h1 class="font-display text-2xl font-bold">{{ state }} Pipeline</h1>
+</header>
+
+<div class="p-8 max-w-page mx-auto w-full">
+    <!-- 9-stage stepper -->
+    <div class="relative flex justify-between items-start mb-10 overflow-x-auto pb-2" id="stepper">
+        <div class="absolute top-5 left-0 right-0 h-0.5 bg-outline-variant" style="z-index:0"></div>
+        {% for s in stages %}
+        <button class="stage-node relative z-10 flex flex-col items-center gap-2 px-2 min-w-[90px]" data-stage="{{ s.key }}" data-num="{{ s.num }}">
+            <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold border-2
+                {% if s.done %}bg-secondary-container border-secondary-container text-white
+                {% elif s.num == current_stage_num + 1 %}bg-surface-container-lowest border-primary text-primary step-pulse
+                {% else %}bg-surface-container-lowest border-outline-variant text-on-surface-variant{% endif %}">
+                {% if s.done %}<span class="material-symbols-outlined">check</span>{% else %}{{ s.num }}{% endif %}
+            </div>
+            <div class="font-label-caps text-center {{ 'text-on-surface' if s.done or s.num == current_stage_num + 1 else 'text-on-surface-variant' }}">{{ s.label }}</div>
+        </button>
+        {% endfor %}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Detail panel -->
+        <div class="lg:col-span-2 bg-surface-container-lowest border border-outline-variant rounded-lg p-6" id="detail-panel">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="font-display text-xl font-bold" id="detail-title">Select a stage above</h2>
+                <div class="flex gap-2" id="detail-actions"></div>
+            </div>
+            <div id="detail-metrics" class="grid grid-cols-3 gap-4 mb-6"></div>
+            <div id="detail-empty" class="text-on-surface-variant italic">Click a stage node to see its details and run it.</div>
+        </div>
+
+        <!-- Running log panel -->
+        <div class="bg-tertiary-container rounded-lg overflow-hidden flex flex-col h-[480px]">
+            <div class="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+                <span class="font-label-caps text-white">Running Log</span>
+                <span id="log-live" class="hidden items-center gap-1 text-secondary-container text-xs font-bold">
+                    <span class="w-2 h-2 rounded-full bg-secondary-container animate-pulse"></span> LIVE
+                </span>
+            </div>
+            <div id="log-panel" class="log-panel flex-1 overflow-y-auto p-4 font-data-mono text-xs space-y-1"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/jobs.js') }}"></script>
+<script>
+const STATE = "{{ state }}";
+const STAGE_SCRIPTS = {
+    preprocess: { key: "preprocess", label: "Run Preprocess" },
+    block: { key: "block", label: "Run Block" },
+    score: { key: "score", label: "Run Score" },
+    adjudicate: { key: "adjudicate", label: "Run Adjudicate", resumable: true },
+    pair_review: { key: null, label: "Open Pair Review", href: `/state/${STATE}/review` },
+    consolidate: { key: "consolidate", label: "Run Consolidate" },
+    assign_draft: { key: "assign_draft", label: "Run Assign IDs" },
+    venue_review: { key: null, label: "Open Venue Review", href: `/state/${STATE}/venues` },
+    commit: { key: "assign_commit", label: "Commit to Database", flags: ["--commit"], danger: true },
+};
+
+function showLive(on) {
+    const el = document.getElementById("log-live");
+    el.classList.toggle("hidden", !on);
+    el.classList.toggle("flex", on);
+}
+
+function loadDetail(stageKey) {
+    document.getElementById("detail-title").textContent = "Loading...";
+    fetch(`/api/state/${STATE}/stage/${stageKey}`)
+        .then((r) => r.json())
+        .then((data) => {
+            document.getElementById("detail-title").textContent = stageKey.replace("_", " ").replace(/\b\w/g, c => c.toUpperCase());
+            document.getElementById("detail-empty").classList.add("hidden");
+            const metricsEl = document.getElementById("detail-metrics");
+            metricsEl.innerHTML = "";
+            const metrics = data.metrics || {};
+            const keys = Object.keys(metrics);
+            if (keys.length === 0) {
+                metricsEl.innerHTML = `<div class="col-span-3 text-on-surface-variant italic">No stats recorded yet for this stage.</div>`;
+            }
+            for (const k of keys) {
+                const div = document.createElement("div");
+                div.className = "bg-surface-container rounded p-3";
+                div.innerHTML = `<div class="font-label-caps text-on-surface-variant">${k}</div><div class="font-data-mono text-lg font-bold">${metrics[k]}</div>`;
+                metricsEl.appendChild(div);
+            }
+            if (data.cost && Object.keys(data.cost).length) {
+                const div = document.createElement("div");
+                div.className = "bg-primary-container text-white rounded p-3 col-span-3";
+                div.innerHTML = `<div class="font-label-caps opacity-80">Gemini API Cost</div>
+                    <div class="font-data-mono text-lg font-bold">$${(data.cost.total_cost_usd || 0).toFixed(4)}</div>
+                    <div class="text-xs opacity-80">${(data.cost.total_tokens || 0).toLocaleString()} tokens</div>`;
+                metricsEl.appendChild(div);
+            }
+
+            const actionsEl = document.getElementById("detail-actions");
+            actionsEl.innerHTML = "";
+            const cfg = STAGE_SCRIPTS[stageKey];
+            if (cfg) {
+                if (cfg.href) {
+                    const a = document.createElement("a");
+                    a.href = cfg.href;
+                    a.className = "bg-primary text-white px-4 py-2 rounded text-sm font-semibold";
+                    a.textContent = cfg.label;
+                    actionsEl.appendChild(a);
+                } else {
+                    const btn = document.createElement("button");
+                    btn.className = (cfg.danger ? "bg-error" : "bg-primary") + " text-white px-4 py-2 rounded text-sm font-semibold";
+                    btn.textContent = cfg.label;
+                    btn.onclick = () => {
+                        if (cfg.danger && !confirm("This commits venue IDs to the database. Continue?")) return;
+                        document.getElementById("log-panel").innerHTML = "";
+                        showLive(true);
+                        btn.disabled = true;
+                        runStage(STATE, cfg.key, cfg.flags || [], "log-panel", (result) => {
+                            showLive(false);
+                            btn.disabled = false;
+                            if (result.status === "done") {
+                                window.location.reload();
+                            } else {
+                                loadDetail(stageKey);
+                            }
+                        });
+                    };
+                    actionsEl.appendChild(btn);
+                    if (cfg.resumable) {
+                        const rbtn = document.createElement("button");
+                        rbtn.className = "bg-surface-container-high text-on-surface px-4 py-2 rounded text-sm font-semibold border border-outline-variant";
+                        rbtn.textContent = "Resume";
+                        rbtn.onclick = () => {
+                            document.getElementById("log-panel").innerHTML = "";
+                            showLive(true);
+                            rbtn.disabled = true;
+                            runStage(STATE, cfg.key, ["--resume"], "log-panel", (result) => {
+                                showLive(false);
+                                rbtn.disabled = false;
+                                if (result.status === "done") {
+                                    window.location.reload();
+                                } else {
+                                    loadDetail(stageKey);
+                                }
+                            });
+                        };
+                        actionsEl.appendChild(rbtn);
+                    }
+                }
+            }
+            if (stageKey === "block") {
+                const mapLink = document.createElement("a");
+                mapLink.href = `/state/${STATE}/block-map`;
+                mapLink.className = "bg-surface-container-high text-on-surface px-4 py-2 rounded text-sm font-semibold border border-outline-variant flex items-center gap-1";
+                mapLink.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px">map</span> View Blocking Map`;
+                actionsEl.appendChild(mapLink);
+            }
+        });
+}
+
+document.querySelectorAll(".stage-node").forEach((btn) => {
+    btn.addEventListener("click", () => loadDetail(btn.dataset.stage));
+});
+
+// Auto-load the next actionable stage on page load
+{% set next_idx = current_stage_num if current_stage_num < (stages|length) else (stages|length - 1) %}
+loadDetail("{{ stages[next_idx].key }}");
+</script>
+{% endblock %}

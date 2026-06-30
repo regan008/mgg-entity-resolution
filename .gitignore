@@ -10,6 +10,9 @@ venv/
 # OS
 .DS_Store
 
+# Design mockups (reference only, not part of the app)
+dashboard-design-docs/
+
 # SQLite scratch (live WAL files)
 *.db-shm
 *.db-wal

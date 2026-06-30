@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Blocking Map: {{ state }} | MGG Entity Resolution{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+    #map { height: 100%; width: 100%; }
+    .cell-tier1 { fill: #002147; fill-opacity: 0.06; stroke: #002147; stroke-opacity: 0.4; stroke-width: 1; }
+    .cell-cross { stroke-dasharray: 4 3; }
+</style>
+{% endblock %}
+
+{% block content %}
+<header class="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-outline-variant px-8 py-4 flex items-center justify-between">
+    <div>
+        <a href="{{ url_for('dashboard.state_pipeline', code=state) }}" class="font-label-caps text-on-surface-variant hover:text-primary">&larr; Back to Pipeline</a>
+        <h1 class="font-display text-xl font-bold">{{ state }}: Blocking Visualization</h1>
+    </div>
+    <div class="font-data-mono text-sm" id="header-stats">—</div>
+</header>
+
+<div class="flex flex-1 overflow-hidden">
+    <aside class="w-sidebar-width border-r border-outline-variant p-4 space-y-4 overflow-y-auto">
+        <div id="empty-state" class="hidden text-on-surface-variant italic text-sm">
+            No blocking data found. Run the Block stage for {{ state }} first.
+        </div>
+        <div id="controls">
+            <div class="font-label-caps text-on-surface-variant mb-2">Layers</div>
+            <label class="flex items-center gap-2 text-sm mb-1"><input type="checkbox" id="toggle-tier1-cells" checked> Tier 1 geohash cells (~1.2km)</label>
+            <label class="flex items-center gap-2 text-sm mb-1"><input type="checkbox" id="toggle-cross-cells"> Cross-tier cells (~5km)</label>
+            <label class="flex items-center gap-2 text-sm mb-1"><input type="checkbox" id="toggle-points" checked> Record points</label>
+            <label class="flex items-center gap-2 text-sm mb-3"><input type="checkbox" id="toggle-all-pairs"> Show all candidate-pair lines</label>
+
+            <div class="font-label-caps text-on-surface-variant mb-2 mt-4">Legend</div>
+            <div class="flex items-center gap-2 text-xs mb-1"><span class="w-3 h-3 rounded-full inline-block" style="background:#002147"></span> Tier 1 record (street-level)</div>
+            <div class="flex items-center gap-2 text-xs mb-1"><span class="w-3 h-3 rounded-full inline-block" style="background:#a93700"></span> Tier 2 record (city-centroid)</div>
+            <div class="flex items-center gap-2 text-xs mb-1"><span class="w-4 h-0.5 inline-block" style="background:#002147"></span> tier1 pair</div>
+            <div class="flex items-center gap-2 text-xs mb-1"><span class="w-4 h-0.5 inline-block" style="background:#a93700"></span> tier2 pair</div>
+            <div class="flex items-center gap-2 text-xs mb-1"><span class="w-4 h-0.5 inline-block" style="background:#5c8a8a"></span> cross_tier pair</div>
+
+            <div class="font-label-caps text-on-surface-variant mb-2 mt-4">Selected Record</div>
+            <div id="selected-info" class="text-xs text-on-surface-variant">Click a point to see its candidate pairs.</div>
+        </div>
+    </aside>
+    <main class="flex-1"><div id="map"></div></main>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const STATE = "{{ state }}";
+const STRATEGY_COLORS = { tier1: "#002147", tier2: "#a93700", cross_tier: "#5c8a8a" };
+
+const map = L.map("map").setView([39.5, -98.35], 5);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors",
+    maxZoom: 18,
+}).addTo(map);
+
+let pointMarkers = {};
+let pairLinesByPoint = {};
+let allPairLines = [];
+let tier1CellLayer = L.layerGroup();
+let crossCellLayer = L.layerGroup();
+let pointLayer = L.layerGroup().addTo(map);
+let pairLayer = L.layerGroup().addTo(map);
+
+function clearSelection() {
+    allPairLines.forEach((l) => pairLayer.removeLayer(l));
+    allPairLines = [];
+}
+
+function showPairsForPoint(id, pairs) {
+    clearSelection();
+    const related = pairs.filter((p) => p.id_a === id || p.id_b === id);
+    for (const p of related) {
+        const line = L.polyline([[p.lat_a, p.lon_a], [p.lat_b, p.lon_b]], {
+            color: STRATEGY_COLORS[p.strategy] || "#888", weight: 2, opacity: 0.8,
+        }).addTo(pairLayer);
+        allPairLines.push(line);
+    }
+    document.getElementById("selected-info").innerHTML =
+        `<div class="font-data-mono font-bold">Record ${id}</div><div>${related.length} candidate pair(s)</div>`;
+}
+
+function showAllPairs(pairs) {
+    clearSelection();
+    for (const p of pairs) {
+        const line = L.polyline([[p.lat_a, p.lon_a], [p.lat_b, p.lon_b]], {
+            color: STRATEGY_COLORS[p.strategy] || "#888", weight: 1, opacity: 0.35,
+        }).addTo(pairLayer);
+        allPairLines.push(line);
+    }
+}
+
+fetch(`/api/state/${STATE}/block-map-data`)
+    .then((r) => r.json())
+    .then((data) => {
+        if (!data.available) {
+            document.getElementById("empty-state").classList.remove("hidden");
+            document.getElementById("controls").classList.add("hidden");
+            return;
+        }
+
+        document.getElementById("header-stats").textContent =
+            `${data.points.length} points${data.sampled ? ' (sampled)' : ''} · ${data.pairs.length} candidate pairs · ${data.cells_tier1.length} tier-1 cells`;
+
+        for (const cell of data.cells_tier1) {
+            const [minLat, minLon, maxLat, maxLon] = cell.bbox;
+            L.rectangle([[minLat, minLon], [maxLat, maxLon]], { className: "cell-tier1" }).addTo(tier1CellLayer);
+        }
+        for (const cell of data.cells_cross_tier) {
+            const [minLat, minLon, maxLat, maxLon] = cell.bbox;
+            L.rectangle([[minLat, minLon], [maxLat, maxLon]], {
+                color: "#5c8a8a", weight: 1, fillOpacity: 0, className: "cell-cross",
+            }).addTo(crossCellLayer);
+        }
+        tier1CellLayer.addTo(map);
+
+        const bounds = [];
+        for (const pt of data.points) {
+            const color = pt.tier === 1 ? "#002147" : "#a93700";
+            const marker = L.circleMarker([pt.lat, pt.lon], {
+                radius: 4, color, fillColor: color, fillOpacity: 0.8, weight: 1,
+            }).addTo(pointLayer);
+            marker.bindTooltip(`${pt.title || '(no title)'} — ${pt.city || ''}`, { sticky: true });
+            marker.on("click", () => showPairsForPoint(pt.id, data.pairs));
+            pointMarkers[pt.id] = marker;
+            bounds.push([pt.lat, pt.lon]);
+        }
+        if (bounds.length) map.fitBounds(bounds, { padding: [20, 20] });
+
+        document.getElementById("toggle-tier1-cells").addEventListener("change", (e) => {
+            e.target.checked ? tier1CellLayer.addTo(map) : map.removeLayer(tier1CellLayer);
+        });
+        document.getElementById("toggle-cross-cells").addEventListener("change", (e) => {
+            e.target.checked ? crossCellLayer.addTo(map) : map.removeLayer(crossCellLayer);
+        });
+        document.getElementById("toggle-points").addEventListener("change", (e) => {
+            e.target.checked ? pointLayer.addTo(map) : map.removeLayer(pointLayer);
+        });
+        document.getElementById("toggle-all-pairs").addEventListener("change", (e) => {
+            if (e.target.checked) showAllPairs(data.pairs); else clearSelection();
+        });
+    });
+</script>
+{% endblock %}

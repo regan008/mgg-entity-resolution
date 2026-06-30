@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Venue Review: {{ state }} | MGG Entity Resolution{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">{% endblock %}
+
+{% block content %}
+<header class="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-outline-variant px-8 py-4 flex items-center justify-between">
+    <div>
+        <a href="{{ url_for('dashboard.state_pipeline', code=state) }}" class="font-label-caps text-on-surface-variant hover:text-primary">&larr; Exit to Pipeline</a>
+        <h1 class="font-display text-xl font-bold">{{ state }}: Venue Group Review</h1>
+    </div>
+    <div class="font-data-mono text-sm" id="summary-line"></div>
+</header>
+
+<div class="flex flex-1 overflow-hidden">
+    <aside class="w-sidebar-width border-r border-outline-variant flex flex-col overflow-hidden">
+        <div class="p-4 border-b border-outline-variant flex items-center justify-between">
+            <span class="font-label-caps text-on-surface-variant">Venue Groups</span>
+            <span class="font-data-mono text-xs bg-surface-container-highest px-2 py-1 rounded" id="group-count">—</span>
+        </div>
+        <div class="p-2 flex gap-1 border-b border-outline-variant">
+            <button class="sort-btn flex-1 text-xs font-label-caps py-1 rounded bg-primary text-white" data-sort="size">Size</button>
+            <button class="sort-btn flex-1 text-xs font-label-caps py-1 rounded bg-surface-container-high" data-sort="flags">Flagged</button>
+        </div>
+        <div class="flex-1 overflow-y-auto" id="group-list"></div>
+    </aside>
+
+    <main class="flex-1 overflow-y-auto p-6" id="detail">
+        <div class="text-on-surface-variant italic">Select a venue group from the sidebar.</div>
+    </main>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const STATE = "{{ state }}";
+let selectedGid = null;
+let currentSort = "size";
+let groupsCache = [];
+
+function loadSummary() {
+    fetch(`/api/state/${STATE}/venues/summary`)
+        .then((r) => r.json())
+        .then((s) => {
+            document.getElementById("group-count").textContent = `${s.total_groups} TOTAL`;
+            document.getElementById("summary-line").textContent =
+                `${s.total_records} records · ${s.singletons} singletons · ${s.flagged} flagged`;
+        });
+}
+
+function loadGroups() {
+    fetch(`/api/state/${STATE}/venues/groups?sort=${currentSort}&per_page=200`)
+        .then((r) => r.json())
+        .then((data) => {
+            groupsCache = data.groups;
+            const list = document.getElementById("group-list");
+            list.innerHTML = "";
+            for (const g of data.groups) {
+                const div = document.createElement("div");
+                div.className = `group-item p-3 border-b border-outline-variant cursor-pointer hover:bg-surface-container ${g.group_id === selectedGid ? 'bg-primary-container text-white' : ''}`;
+                div.dataset.gid = g.group_id;
+                div.innerHTML = `
+                    <div class="font-data-mono text-xs font-label-caps flex items-center gap-1">
+                        ${g.venue_id} ${g.flags ? '<span class="material-symbols-outlined text-xs text-secondary">flag</span>' : ''}
+                    </div>
+                    <div class="font-semibold text-sm truncate">${g.titles[0] || '(untitled)'}</div>
+                    <div class="text-xs ${g.group_id === selectedGid ? 'text-white/70' : 'text-on-surface-variant'}">${g.group_size} Records, ${g.year_range}</div>
+                `;
+                div.addEventListener("click", () => selectGroup(g.group_id));
+                list.appendChild(div);
+            }
+            if (selectedGid === null && data.groups.length) selectGroup(data.groups[0].group_id);
+        });
+}
+
+function selectGroup(gid) {
+    selectedGid = gid;
+    loadGroups();
+    const g = groupsCache.find((x) => x.group_id === gid) || groupsCache.find((x) => x.group_id === gid);
+    fetch(`/api/state/${STATE}/venues/groups?sort=${currentSort}&per_page=200`)
+        .then((r) => r.json())
+        .then((data) => {
+            const group = data.groups.find((x) => x.group_id === gid);
+            if (!group) return;
+            renderDetail(group);
+        });
+}
+
+function renderDetail(g) {
+    const members = g.members;
+    const years = members.filter((m) => m.year).map((m) => m.year);
+    const minYear = Math.min(...years), maxYear = Math.max(...years);
+    const span = maxYear - minYear || 1;
+
+    const dots = members.map((m) => {
+        if (!m.year) return "";
+        const left = ((m.year - minYear) / span) * 90 + 5;
+        return `<div class="absolute bottom-0 w-2 h-2 rounded-full bg-primary" style="left:${left}%" title="${m.title || m.description || ''} (${m.year})"></div>`;
+    }).join("");
+
+    const memberRows = members.map((m) => `
+        <tr class="border-t border-outline-variant text-sm">
+            <td class="px-3 py-2 font-data-mono">${m.id}</td>
+            <td class="px-3 py-2">${m.is_na_title ? `[NA: ${(m.description||'').slice(0,30)}]` : m.title}</td>
+            <td class="px-3 py-2">${m.street_address || ''}, ${m.city || ''}</td>
+            <td class="px-3 py-2 font-data-mono">${m.year || '—'}</td>
+            <td class="px-3 py-2"><input type="checkbox" class="member-check" data-id="${m.id}"></td>
+        </tr>
+    `).join("");
+
+    document.getElementById("detail").innerHTML = `
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <div class="flex gap-2 mb-1">
+                    <span class="font-label-caps bg-secondary-container/20 text-secondary px-2 py-1 rounded">VENUE REVIEW</span>
+                    <span class="font-data-mono text-xs text-on-surface-variant px-2 py-1">ID: ${g.venue_id}</span>
+                </div>
+                <h2 class="font-display text-2xl font-bold">${g.titles[0] || '(untitled)'}</h2>
+                <p class="text-on-surface-variant italic text-sm">Resolved from ${g.group_size} records (${g.year_range}). Method: ${g.resolution_method}.</p>
+            </div>
+            <div class="flex gap-2">
+                <button id="split-btn" class="bg-surface-container-high border border-outline-variant px-4 py-2 rounded text-sm font-semibold">Split Selected</button>
+                <button id="approve-btn" class="bg-primary text-white px-4 py-2 rounded text-sm font-semibold">Approve All Groups</button>
+            </div>
+        </div>
+
+        ${g.flags ? `<div class="bg-error-container text-on-error-container rounded-lg p-4 mb-4">
+            <div class="font-bold flex items-center gap-2"><span class="material-symbols-outlined">report</span> Flagged</div>
+            <div class="text-sm">${g.flags}</div>
+        </div>` : ""}
+
+        <div class="grid grid-cols-12 gap-6 mb-6">
+            <div class="col-span-12 bg-surface-container-lowest border border-outline-variant rounded-lg p-4">
+                <div class="font-label-caps text-on-surface-variant mb-3">Temporal Record Distribution (${minYear}–${maxYear})</div>
+                <div class="relative h-12 border-b border-outline-variant">${dots}</div>
+            </div>
+        </div>
+
+        <div class="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden">
+            <table class="w-full">
+                <thead class="bg-surface-container-high font-label-caps text-on-surface-variant text-xs">
+                    <tr>
+                        <th class="text-left px-3 py-2">ID</th>
+                        <th class="text-left px-3 py-2">Title</th>
+                        <th class="text-left px-3 py-2">Address</th>
+                        <th class="text-left px-3 py-2">Year</th>
+                        <th class="text-left px-3 py-2">Select</th>
+                    </tr>
+                </thead>
+                <tbody>${memberRows}</tbody>
+            </table>
+        </div>
+    `;
+
+    document.getElementById("split-btn").addEventListener("click", () => {
+        const ids = Array.from(document.querySelectorAll(".member-check:checked")).map((c) => parseInt(c.dataset.id));
+        if (!ids.length) { alert("Select records to split out first."); return; }
+        fetch(`/api/state/${STATE}/venues/split`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ group_id: g.group_id, record_ids: ids }),
+        }).then((r) => r.json()).then((res) => {
+            if (res.error) { alert(res.error); return; }
+            selectedGid = null;
+            loadSummary(); loadGroups();
+        });
+    });
+
+    document.getElementById("approve-btn").addEventListener("click", () => {
+        if (!confirm("Approve all venue groups for this state? This prepares them for commit.")) return;
+        fetch(`/api/state/${STATE}/venues/approve`, { method: "POST" })
+            .then((r) => r.json())
+            .then((res) => alert(res.message + ` (${res.edits_made} edits made this session)`));
+    });
+}
+
+document.querySelectorAll(".sort-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+        currentSort = btn.dataset.sort;
+        document.querySelectorAll(".sort-btn").forEach((b) => b.className = "sort-btn flex-1 text-xs font-label-caps py-1 rounded bg-surface-container-high");
+        btn.className = "sort-btn flex-1 text-xs font-label-caps py-1 rounded bg-primary text-white";
+        loadGroups();
+    });
+});
+
+loadSummary();
+loadGroups();
+</script>
+{% endblock %}
