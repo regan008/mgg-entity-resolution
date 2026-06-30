@@ -87,7 +87,7 @@ WEIGHT_JARO_WINKLER_NO_ADDR = 1 / 3
 AUTO_MATCH_THRESHOLD = 0.75
 AUTO_REJECT_THRESHOLD = 0.50
 AI_BATCH_SIZE = 20
-GEMINI_MODEL = "gemini-2.5-flash-lite"
+GEMINI_MODEL = "models/gemini-2.5-flash-lite"
 GEMINI_API_KEY_ENV = "GEMINI_API_KEY"  # env var name; GOOGLE_API_KEY also accepted
 
 # Edge case detection thresholds

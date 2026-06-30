@@ -33,7 +33,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))  # loads .env befor
 import pandas as pd
 from google import genai
 from google.genai import types
-from google.api_core.exceptions import ResourceExhausted, GoogleAPIError
+from google.api_core.exceptions import ResourceExhausted, ServiceUnavailable, GoogleAPIError
 
 import config
 
@@ -178,10 +178,12 @@ def call_gemini_api(client: genai.Client, prompt: str,
             text = (response.text or "").strip()
             return json.loads(text)
 
-        except ResourceExhausted:
+        except (ResourceExhausted, ServiceUnavailable) as e:
             wait = 2 ** (attempt + 1)
-            logger.warning(f"Rate limited, waiting {wait}s (attempt {attempt + 1})")
-            time.sleep(wait)
+            error_type = "Rate limited" if isinstance(e, ResourceExhausted) else "Service unavailable"
+            logger.warning(f"{error_type}, waiting {wait}s (attempt {attempt + 1})")
+            if attempt < max_retries - 1:
+                time.sleep(wait)
         except json.JSONDecodeError as e:
             logger.warning(
                 f"Failed to parse Gemini response as JSON "
