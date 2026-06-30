@@ -74,9 +74,10 @@ function loadSummary() {
             totalGroupCount = s.total_groups;
             document.getElementById("group-count").textContent = `${s.total_groups} TOTAL`;
             const aiPart = s.has_ai_review ? ` · ${s.ai_flagged} AI-flagged` : "";
+            const delPart = s.deletes ? ` · ${s.deletes} deleted` : "";
             document.getElementById("summary-line").textContent =
                 `${s.total_records} records · ${s.reviewed}/${s.total_groups} reviewed · ${s.total_edits} edits ` +
-                `(${s.splits}S / ${s.merges}M / ${s.reassigns}R)${aiPart}`;
+                `(${s.splits}S / ${s.merges}M / ${s.reassigns}R)${delPart}${aiPart}`;
             const cnt = document.getElementById("ai-flag-count");
             if (cnt) cnt.textContent = s.has_ai_review ? `(${s.ai_flagged})` : "";
             const statusEl = document.getElementById("ai-review-status");
@@ -181,6 +182,7 @@ function renderDetail(g) {
             <div class="flex gap-2">
                 <button id="review-btn" class="px-4 py-2 rounded text-sm font-semibold ${g.reviewed ? 'bg-green-600 text-white' : 'bg-surface-container-high border border-outline-variant'}">${g.reviewed ? '✓ Reviewed' : 'Mark Reviewed'} <kbd class="ml-1 text-xs opacity-60">R</kbd></button>
                 <button id="split-btn" class="bg-surface-container-high border border-outline-variant px-4 py-2 rounded text-sm font-semibold">Split Selected</button>
+                <button id="delete-btn" class="flex items-center gap-1 text-error border border-error/40 hover:bg-error-container px-4 py-2 rounded text-sm font-semibold"><span class="material-symbols-outlined text-base">delete</span> Delete Group</button>
             </div>
         </div>
 
@@ -226,6 +228,19 @@ function renderDetail(g) {
         fetch(`/api/state/${STATE}/venues/split`, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ group_id: g.group_id, record_ids: ids, notes }),
+        }).then((r) => r.json()).then((res) => {
+            if (res.error) { alert(res.error); return; }
+            selectedGid = null;
+            loadSummary(); loadGroups();
+        });
+    });
+
+    document.getElementById("delete-btn").addEventListener("click", () => {
+        if (!confirm(`Delete venue group ${g.venue_id} and all ${g.group_size} of its records?\n\nUse this for groups that don't belong (e.g. a cruising area that wasn't filtered out). The records drop out of the draft entirely and won't be assigned a venue ID. This is logged to venue_edit_log.csv.`)) return;
+        const notes = prompt("Optional reason for deleting (e.g. 'cruising area, not brick-and-mortar'):", "") || "";
+        fetch(`/api/state/${STATE}/venues/delete`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ group_id: g.group_id, notes }),
         }).then((r) => r.json()).then((res) => {
             if (res.error) { alert(res.error); return; }
             selectedGid = null;

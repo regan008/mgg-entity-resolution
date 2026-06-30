@@ -284,12 +284,13 @@ def api_summary(code):
     splits = sum(1 for e in cache["edit_log"] if e["action"] == "split")
     merges = sum(1 for e in cache["edit_log"] if e["action"] == "merge")
     reassigns = sum(1 for e in cache["edit_log"] if e["action"] == "reassign")
+    deletes = sum(1 for e in cache["edit_log"] if e["action"] == "delete")
 
     return jsonify({
         "total_groups": n_groups, "total_records": n_records, "singletons": n_singletons,
         "multi_record": n_groups - n_singletons, "flagged": n_flagged, "method_counts": method_counts,
         "reviewed": n_reviewed, "splits": splits, "merges": merges, "reassigns": reassigns,
-        "total_edits": splits + merges + reassigns,
+        "deletes": deletes, "total_edits": splits + merges + reassigns,
         "ai_flagged": n_ai_flagged, "has_ai_review": has_ai_review,
     })
 
@@ -457,6 +458,34 @@ def api_reassign(code):
     return jsonify({"status": "reassigned", "record_id": record_id})
 
 
+@venue_bp.route("/api/state/<code>/venues/delete", methods=["POST"])
+def api_delete(code):
+    """Delete a whole group and all its records from the draft assignments —
+    e.g. a cruising-area venue that slipped past the brick-and-mortar filter.
+    The records simply drop out of the draft and will not be assigned a venue
+    ID on commit. Logged to venue_edit_log.csv as a 'delete' action."""
+    cache = _load_state(code.upper())
+    data = request.json
+    gid = int(data["group_id"])
+    notes = data.get("notes", "")
+    if gid not in cache["groups"]:
+        return jsonify({"error": "Group not found"}), 404
+
+    members = cache["groups"][gid]
+    member_ids = [m["id"] for m in members]
+    venue_id = cache["meta"][gid]["venue_id"]
+    group_size = len(members)
+
+    del cache["groups"][gid]
+    del cache["meta"][gid]
+    _save_draft(cache)  # also renumbers remaining venue IDs
+    _log_edit(cache, "delete", {
+        "group_id": gid, "venue_id": venue_id, "member_ids": member_ids,
+        "group_size": group_size, "notes": notes,
+    })
+    return jsonify({"status": "deleted", "venue_id": venue_id, "records_removed": group_size})
+
+
 @venue_bp.route("/api/state/<code>/venues/review", methods=["POST"])
 def api_review(code):
     """Mark a single group as reviewed-and-correct (no edit needed)."""
@@ -506,6 +535,8 @@ def _record_venue_accuracy(cache):
     splits = sum(1 for e in cache["edit_log"] if e["action"] == "split")
     merges = sum(1 for e in cache["edit_log"] if e["action"] == "merge")
     reassigns = sum(1 for e in cache["edit_log"] if e["action"] == "reassign")
+    deletes = sum(1 for e in cache["edit_log"] if e["action"] == "delete")
+    records_deleted = sum(len(e.get("member_ids", [])) for e in cache["edit_log"] if e["action"] == "delete")
 
     affected = set()
     for entry in cache["edit_log"]:
@@ -529,6 +560,7 @@ def _record_venue_accuracy(cache):
     StatsTracker().record(cache["state"], "venue_review", {
         "original_groups": original_groups, "final_groups": len(cache["meta"]),
         "total_edits": splits + merges + reassigns, "splits": splits, "merges": merges, "reassigns": reassigns,
+        "groups_deleted": deletes, "records_deleted": records_deleted,
         "groups_needing_correction": groups_needing_correction, "groups_correct": groups_correct,
         "groups_reviewed_confirmed": groups_reviewed,
         "venue_assignment_accuracy": round(accuracy, 4),
