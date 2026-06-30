@@ -107,8 +107,15 @@ def get_job(job_id: str) -> dict | None:
 
 
 def get_job_for_state(state: str) -> dict | None:
+    """Return the currently-running job for a state, or None. The state lock is
+    not cleared on completion, so filter to status == 'running' — otherwise a
+    long-finished job would still read as active (blocking reset, falsely
+    resuming the log panel on reload, etc.)."""
     job_id = _state_locks.get(state)
-    return _jobs.get(job_id) if job_id else None
+    if not job_id:
+        return None
+    job = _jobs.get(job_id)
+    return job if job and job.get("status") == "running" else None
 
 
 def get_log(job_id: str, since: int = 0) -> dict | None:
