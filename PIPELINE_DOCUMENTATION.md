@@ -16,10 +16,19 @@ All configuration lives in [`config.py`](config.py). Each stage can be run indep
 
 ## Stage 1: Preprocessing (`preprocess.py`)
 
-**Purpose**: Load raw records from SQLite, normalize text fields, classify geocode quality, and flag special cases.
+**Purpose**: Load raw records from SQLite, normalize text fields, classify geocode quality, flag special cases, and **exclude cruising areas** (brick-and-mortar scope only).
 
 **Input**: `mgg.db` → `locations` table, filtered by state
 **Output**: `working/{state}/preprocessed.csv`
+
+### Cruising Area Exclusion
+
+This pipeline processes **brick-and-mortar venues only** (bars, bookstores, bathhouses, community centers, etc.). Cruising area records (amenity_id=90, ~16.4% of all records) are excluded at the source because they are a fundamentally different entity-resolution problem:
+- 96% have **descriptive place titles** ("Lagarde Park", "Noble St. betw. 8th & 16th") that legitimately drift year to year
+- Name/embedding similarity metrics designed for business names are ineffective for them
+- If cruising areas are resolved separately, they belong in a dedicated track with geography-weighted logic
+
+**Impact**: WY: 358 records → ~261 brick-and-mortar; DE: 87 cruising area records removed.
 
 ### Key Functions
 
@@ -153,7 +162,7 @@ See [`wy_adaptive_scoring_decision.md`](wy_adaptive_scoring_decision.md) for ful
 
 ## Stage 4: Adjudication (`adjudicate.py`)
 
-**Purpose**: Apply tiered decision logic — auto-match high scores, auto-reject low scores, and send the middle range to Claude for AI adjudication. Detect edge cases and flag pairs for human review.
+**Purpose**: Apply tiered decision logic — auto-match high scores, auto-reject low scores, and send the middle range to **Gemini Flash Lite** for AI adjudication. Detect edge cases and flag pairs for human review.
 
 **Input**: `working/{state}/scored_pairs.csv` + `working/{state}/preprocessed.csv`
 **Output**: `working/{state}/adjudicated_pairs.csv`, `working/{state}/edge_cases.csv`, `working/{state}/human_review_pairs.csv`
@@ -162,17 +171,17 @@ See [`wy_adaptive_scoring_decision.md`](wy_adaptive_scoring_decision.md) for ful
 
 | Function | Location | Description |
 |----------|----------|-------------|
-| `detect_edge_case(row, has_na_title)` | `adjudicate.py:35` | Detect edge cases: high addr/low name, high name/low addr, signal disagreement |
-| `build_ai_prompt(pairs_batch)` | `adjudicate.py:69` | Build structured prompt for Claude with full record context |
-| `call_claude_api(prompt, max_retries)` | `adjudicate.py:125` | Call Claude API with exponential backoff on rate limits |
-| `adjudicate_state(state, skip_ai)` | `adjudicate.py:167` | Main orchestrator: classify pairs, run AI batches, flag for human review |
+| `detect_edge_case(row, has_na_title)` | `adjudicate.py:43` | Detect edge cases: high addr/low name, high name/low addr, signal disagreement |
+| `build_ai_prompt(pairs_batch)` | `adjudicate.py:87` | Build structured prompt for Gemini with full record context |
+| `call_gemini_api(client, prompt, state)` | `adjudicate.py:161` | Call Gemini API with exponential backoff on rate limits and service unavailability; logs token usage and cost |
+| `adjudicate_state(state, skip_ai, resume)` | `adjudicate.py:223` | Main orchestrator: classify pairs, run AI batches, flag for human review; resume support for interrupted runs |
 
 ### Decision Tiers
 
 | Tier | Score Range | Action |
 |------|-------------|--------|
 | Auto-Match | ≥ 0.75 | Automatically marked as `match` |
-| AI Adjudication | 0.50 – 0.75 | Sent to Claude in batches of 20 |
+| AI Adjudication | 0.50 – 0.75 | Sent to Gemini in batches of 20 |
 | Auto-Reject | < 0.50 | Automatically marked as `reject` |
 
 ### Edge Case Detection
@@ -191,19 +200,27 @@ Not all AI-adjudicated pairs require human review. After AI adjudication, pairs 
 
 | AI Result | Human Review? | Rationale |
 |-----------|---------------|-----------|
-| Any decision with confidence ≥ 0.90 | **No** — auto-accepted | WY calibration: 100% accuracy (81/81 pairs) |
-| AI reject at any confidence | **No** — auto-accepted | WY calibration: 100% accuracy (54/54 rejects) |
-| AI match with confidence < 0.90 | **Yes** | WY calibration: only 41% accuracy in 0.80–0.90 band |
+| Any decision with confidence ≥ 0.90 | **No** — auto-accepted | Haiku calibration: 100% accuracy (81/81 pairs) |
+| AI reject at any confidence | **No** — auto-accepted | Haiku calibration: 100% accuracy (54/54 rejects) |
+| AI match with confidence < 0.90 | **Yes** | Haiku calibration: only 41% accuracy in 0.80–0.90 band |
 | AI uncertain | **Yes** | AI couldn't decide — human judgment needed |
-| Signal disagreement pairs | **Yes** | Always flagged regardless of confidence |
 
-**Impact**: For DE (844 records, 3,624 AI-range pairs), this reduced human review from 3,624 pairs to ~445 — an 88% reduction — while maintaining quality by focusing human attention on the cases where AI is least reliable.
+**Impact**: For DE (844 records, 3,624 AI-range pairs), this reduced human review from 3,624 pairs to ~445 — an 88% reduction — while maintaining quality by focusing human attention on the cases where AI is least reliable. WY test: all 106 AI-range pairs received high confidence (≥0.90), skipping human review entirely.
 
 **Resume support**: If the API call is interrupted mid-run, use `--resume` to pick up where it stopped:
+```bash
+python3 adjudicate.py DE --resume
 ```
-ANTHROPIC_API_KEY=sk-... python3 adjudicate.py DE --resume
+The `.env` file (gitignored) holds the `GEMINI_API_KEY`. Progress is saved after each batch of 20 pairs.
+
+### API Cost Tracking
+
+All Gemini API calls are logged to `api_calls.csv` with token counts and costs. To view costs by state:
+```python
+from api_cost_tracker import APICostTracker
+tracker = APICostTracker()
+print(tracker.summary())
 ```
-Progress is saved after each batch of 20 pairs.
 
 ### Configuration
 
@@ -212,11 +229,12 @@ Progress is saved after each batch of 20 pairs.
 | `AUTO_MATCH_THRESHOLD` | 0.75 | `config.py:87` |
 | `AUTO_REJECT_THRESHOLD` | 0.50 | `config.py:88` |
 | `AI_BATCH_SIZE` | 20 | `config.py:89` |
-| `ANTHROPIC_MODEL` | `claude-sonnet-4-20250514` | `config.py:90` |
-| `AI_HIGH_CONFIDENCE_THRESHOLD` | 0.90 | `config.py:98` |
-| `SIGNAL_DISAGREE_EMB_MIN` | 0.60 | `config.py:105` |
-| `SIGNAL_DISAGREE_JW_MAX` | 0.55 | `config.py:106` |
-| `SIGNAL_DISAGREE_ADDR_MAX` | 0.50 | `config.py:107` |
+| `GEMINI_MODEL` | `models/gemini-3.1-flash-lite` | `config.py:90` |
+| `GEMINI_API_KEY_ENV` | `GEMINI_API_KEY` | `config.py:91` |
+| `AI_HIGH_CONFIDENCE_THRESHOLD` | 0.90 | `config.py:103` |
+| `SIGNAL_DISAGREE_EMB_MIN` | 0.60 | `config.py:107` |
+| `SIGNAL_DISAGREE_JW_MAX` | 0.55 | `config.py:108` |
+| `SIGNAL_DISAGREE_ADDR_MAX` | 0.50 | `config.py:109` |
 
 ### Output Columns
 

@@ -36,8 +36,10 @@ from google.genai import types
 from google.api_core.exceptions import ResourceExhausted, ServiceUnavailable, GoogleAPIError
 
 import config
+from api_cost_tracker import APICostTracker
 
 logger = logging.getLogger(__name__)
+cost_tracker = APICostTracker()
 
 
 def detect_edge_case(row: pd.Series, has_na_title: bool = False) -> str:
@@ -150,7 +152,7 @@ def _get_gemini_client() -> genai.Client:
     return genai.Client(api_key=api_key)
 
 
-def call_gemini_api(client: genai.Client, prompt: str,
+def call_gemini_api(client: genai.Client, prompt: str, state: str = "",
                     max_retries: int = 3) -> list[dict]:
     """
     Call Gemini for adjudication. Returns list of match decisions.
@@ -163,6 +165,12 @@ def call_gemini_api(client: genai.Client, prompt: str,
       - JSON parse errors (rare malformed responses)
 
     Returns [] on non-retryable errors or after max_retries exhausted.
+
+    Args:
+        client: Gemini API client
+        prompt: Prompt text
+        state: State code (for cost tracking)
+        max_retries: Max retry attempts
     """
     for attempt in range(max_retries):
         text = ""
@@ -176,6 +184,15 @@ def call_gemini_api(client: genai.Client, prompt: str,
                 ),
             )
             text = (response.text or "").strip()
+
+            # Log token usage and cost if available
+            if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                cost_tracker.log_call(
+                    state=state,
+                    input_tokens=response.usage_metadata.prompt_token_count,
+                    output_tokens=response.usage_metadata.candidates_token_count,
+                )
+
             return json.loads(text)
 
         except (ResourceExhausted, ServiceUnavailable) as e:
@@ -361,7 +378,7 @@ def adjudicate_state(state: str, skip_ai: bool = False,
             )
 
             prompt = build_ai_prompt(batch_data)
-            results = call_gemini_api(gemini_client, prompt)
+            results = call_gemini_api(gemini_client, prompt, state=state)
 
             # Apply AI decisions
             for result in results:
