@@ -22,6 +22,10 @@
             <button class="sort-btn flex-1 text-xs font-label-caps py-1 rounded bg-surface-container-high" data-sort="flags">Flagged</button>
         </div>
         <div class="flex-1 overflow-y-auto" id="group-list"></div>
+        <div class="p-3 border-t border-outline-variant">
+            <button id="approve-btn" class="w-full bg-primary text-white px-4 py-2 rounded text-sm font-semibold">Approve All Groups for {{ state }}</button>
+            <p class="text-xs text-on-surface-variant mt-2">Approves every group currently in the list above — not just the one you're viewing.</p>
+        </div>
     </aside>
 
     <main class="flex-1 overflow-y-auto p-6" id="detail">
@@ -36,11 +40,20 @@ const STATE = "{{ state }}";
 let selectedGid = null;
 let currentSort = "size";
 let groupsCache = [];
+let totalGroupCount = 0;
+
+document.getElementById("approve-btn").addEventListener("click", () => {
+    if (!confirm(`Approve all ${totalGroupCount} venue groups for ${STATE}? This prepares the entire state for commit — not just the group you're viewing.`)) return;
+    fetch(`/api/state/${STATE}/venues/approve`, { method: "POST" })
+        .then((r) => r.json())
+        .then((res) => alert(res.message + ` (${res.edits_made} edits made this session)`));
+});
 
 function loadSummary() {
     fetch(`/api/state/${STATE}/venues/summary`)
         .then((r) => r.json())
         .then((s) => {
+            totalGroupCount = s.total_groups;
             document.getElementById("group-count").textContent = `${s.total_groups} TOTAL`;
             document.getElementById("summary-line").textContent =
                 `${s.total_records} records · ${s.singletons} singletons · ${s.flagged} flagged`;
@@ -119,7 +132,6 @@ function renderDetail(g) {
             </div>
             <div class="flex gap-2">
                 <button id="split-btn" class="bg-surface-container-high border border-outline-variant px-4 py-2 rounded text-sm font-semibold">Split Selected</button>
-                <button id="approve-btn" class="bg-primary text-white px-4 py-2 rounded text-sm font-semibold">Approve All Groups</button>
             </div>
         </div>
 
@@ -164,12 +176,6 @@ function renderDetail(g) {
         });
     });
 
-    document.getElementById("approve-btn").addEventListener("click", () => {
-        if (!confirm("Approve all venue groups for this state? This prepares them for commit.")) return;
-        fetch(`/api/state/${STATE}/venues/approve`, { method: "POST" })
-            .then((r) => r.json())
-            .then((res) => alert(res.message + ` (${res.edits_made} edits made this session)`));
-    });
 }
 
 document.querySelectorAll(".sort-btn").forEach((btn) => {
