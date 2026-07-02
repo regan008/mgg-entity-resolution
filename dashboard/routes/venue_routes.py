@@ -315,6 +315,12 @@ def api_groups(code):
         gids = [g for g in gids if _has_duplicate_years(cache, g)]
     elif filter_type == "ai_flagged":
         gids = [g for g in gids if (meta[g].get("ai_flag") or {}).get("needs_review")]
+    elif filter_type == "reviewed":
+        reviewed_sets = _reviewed_memberships(cache)
+        gids = [g for g in gids if _group_membership(cache, g) in reviewed_sets]
+    elif filter_type == "unreviewed":
+        reviewed_sets = _reviewed_memberships(cache)
+        gids = [g for g in gids if _group_membership(cache, g) not in reviewed_sets]
 
     if sort_by == "size":
         gids.sort(key=lambda g: -meta[g]["group_size"])

@@ -3,7 +3,8 @@
 {% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">{% endblock %}
 
 {% block content %}
-<header class="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-outline-variant px-8 py-4 flex items-center justify-between">
+<div class="h-screen flex flex-col overflow-hidden">
+<header class="bg-surface/95 border-b border-outline-variant px-8 py-4 flex items-center justify-between shrink-0">
     <div>
         <a href="{{ url_for('dashboard.state_pipeline', code=state) }}" class="font-label-caps text-on-surface-variant hover:text-primary">&larr; Exit to Pipeline</a>
         <h1 class="font-display text-xl font-bold">{{ state }}: Venue Group Review</h1>
@@ -13,31 +14,41 @@
 
 <div class="flex flex-1 overflow-hidden">
     <aside class="w-sidebar-width border-r border-outline-variant flex flex-col overflow-hidden">
-        <div class="p-4 border-b border-outline-variant flex items-center justify-between">
+        <div class="p-4 border-b border-outline-variant flex items-center justify-between shrink-0">
             <span class="font-label-caps text-on-surface-variant">Venue Groups</span>
             <span class="font-data-mono text-xs bg-surface-container-highest px-2 py-1 rounded" id="group-count">—</span>
         </div>
-        <div class="p-2 flex gap-1 border-b border-outline-variant">
+        <div class="p-2 flex gap-1 border-b border-outline-variant shrink-0">
             <button class="sort-btn flex-1 text-xs font-label-caps py-1 rounded bg-primary text-white" data-sort="size">Size</button>
             <button class="sort-btn flex-1 text-xs font-label-caps py-1 rounded bg-surface-container-high" data-sort="flags">Flagged</button>
         </div>
-        <div class="p-2 flex gap-1 items-center border-b border-outline-variant">
-            <button class="filter-btn flex-1 text-xs font-label-caps py-1 rounded bg-primary text-white" data-filter="all">All</button>
-            <button class="filter-btn flex-1 text-xs font-label-caps py-1 rounded bg-surface-container-high" data-filter="ai_flagged" id="ai-filter-btn">AI Flagged <span id="ai-flag-count"></span></button>
+        <div class="p-2 flex flex-wrap gap-1 items-center border-b border-outline-variant shrink-0">
+            <button class="filter-btn text-xs font-label-caps px-2 py-1 rounded bg-primary text-white" data-filter="all">All</button>
+            <button class="filter-btn text-xs font-label-caps px-2 py-1 rounded bg-surface-container-high" data-filter="unreviewed">To Review</button>
+            <button class="filter-btn text-xs font-label-caps px-2 py-1 rounded bg-surface-container-high" data-filter="reviewed">Reviewed</button>
+            <button class="filter-btn text-xs font-label-caps px-2 py-1 rounded bg-surface-container-high" data-filter="ai_flagged" id="ai-filter-btn">AI Flagged <span id="ai-flag-count"></span></button>
         </div>
-        <div class="p-2 border-b border-outline-variant">
+        <div class="px-3 py-1.5 text-[10px] text-on-surface-variant border-b border-outline-variant shrink-0">
+            <span class="font-data-mono font-bold">J</span>/<span class="font-data-mono font-bold">K</span> or ↑/↓ navigate · <span class="font-data-mono font-bold">R</span> mark reviewed · ←/→ page
+        </div>
+        <div class="p-2 border-b border-outline-variant shrink-0">
             <button id="ai-review-btn" class="w-full flex items-center justify-center gap-1 text-xs font-semibold bg-secondary-container/20 text-secondary border border-secondary/30 hover:bg-secondary-container/40 py-2 rounded">
                 <span class="material-symbols-outlined text-base">smart_toy</span> Run AI Group Review
             </button>
             <div id="ai-review-status" class="text-xs text-on-surface-variant mt-1"></div>
             <pre id="ai-log" class="hidden mt-2 max-h-32 overflow-y-auto text-[10px] font-data-mono bg-surface-container-highest rounded p-2"></pre>
         </div>
-        <div id="merge-bar" class="hidden p-2 border-b border-outline-variant bg-secondary-container/10 flex items-center justify-between">
+        <div id="merge-bar" class="hidden p-2 border-b border-outline-variant bg-secondary-container/10 flex items-center justify-between shrink-0">
             <span class="text-xs font-data-mono" id="merge-count">0 selected</span>
             <button id="merge-btn" class="bg-secondary text-white px-3 py-1 rounded text-xs font-semibold">Merge Selected</button>
         </div>
         <div class="flex-1 overflow-y-auto" id="group-list"></div>
-        <div class="p-3 border-t border-outline-variant">
+        <div id="pagination-bar" class="hidden px-3 py-2 border-t border-outline-variant flex items-center justify-between text-xs shrink-0">
+            <button id="prev-page" class="px-3 py-1 rounded bg-surface-container-high border border-outline-variant font-semibold disabled:opacity-40">Prev</button>
+            <span id="page-indicator" class="font-data-mono text-on-surface-variant"></span>
+            <button id="next-page" class="px-3 py-1 rounded bg-surface-container-high border border-outline-variant font-semibold disabled:opacity-40">Next</button>
+        </div>
+        <div class="p-3 border-t border-outline-variant shrink-0">
             <button id="approve-btn" class="w-full bg-primary text-white px-4 py-2 rounded text-sm font-semibold">Approve All Groups for {{ state }}</button>
             <p class="text-xs text-on-surface-variant mt-2">Approves every group currently in the list above — not just the one you're viewing. Split/merge/reassign edits and review confirmations are logged to <span class="font-data-mono">venue_edit_log.csv</span>.</p>
         </div>
@@ -47,15 +58,19 @@
         <div class="text-on-surface-variant italic">Select a venue group from the sidebar.</div>
     </main>
 </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script src="{{ url_for('static', filename='js/jobs.js') }}"></script>
 <script>
 const STATE = "{{ state }}";
+const PER_PAGE = 50;
 let selectedGid = null;
 let currentSort = "size";
 let currentFilter = "all";
+let currentPage = 0;
+let totalPages = 1;
 let groupsCache = [];
 let totalGroupCount = 0;
 let mergeSelected = new Set();
@@ -93,57 +108,127 @@ function updateMergeBar() {
     bar.classList.toggle("hidden", mergeSelected.size < 2);
 }
 
-function loadGroups() {
-    fetch(`/api/state/${STATE}/venues/groups?sort=${currentSort}&filter=${currentFilter}&per_page=200`)
+// Fetch the current page of groups from the server. `desiredSelection` controls
+// which group ends up selected after the load:
+//   "first" / "last" -> first or last group on the page (used for paging + wrap)
+//   <number>         -> that gid if present on the page, else the first
+//   undefined        -> keep the current selection if it's on the page, else first
+function fetchGroups(desiredSelection) {
+    return fetch(`/api/state/${STATE}/venues/groups?sort=${currentSort}&filter=${currentFilter}&page=${currentPage}&per_page=${PER_PAGE}`)
         .then((r) => r.json())
         .then((data) => {
+            totalPages = data.total_pages || 1;
+            // Page can fall out of range after deletes/merges — clamp and refetch.
+            if (totalPages > 0 && currentPage >= totalPages) {
+                currentPage = totalPages - 1;
+                return fetchGroups(desiredSelection);
+            }
             groupsCache = data.groups;
-            const list = document.getElementById("group-list");
-            list.innerHTML = "";
-            if (!data.groups.length) {
-                list.innerHTML = `<div class="p-4 text-xs text-on-surface-variant italic">No groups match this filter.</div>`;
+            renderList();
+            renderPagination(data);
+
+            let target = null;
+            if (desiredSelection === "first") target = groupsCache[0]?.group_id ?? null;
+            else if (desiredSelection === "last") target = groupsCache[groupsCache.length - 1]?.group_id ?? null;
+            else if (typeof desiredSelection === "number")
+                target = groupsCache.some((g) => g.group_id === desiredSelection) ? desiredSelection : (groupsCache[0]?.group_id ?? null);
+            else
+                target = groupsCache.some((g) => g.group_id === selectedGid) ? selectedGid : (groupsCache[0]?.group_id ?? null);
+
+            if (target !== null) {
+                selectGroup(target, { scroll: true });
+            } else {
+                selectedGid = null;
+                document.getElementById("detail").innerHTML =
+                    `<div class="text-on-surface-variant italic">No groups match this filter.</div>`;
             }
-            for (const g of data.groups) {
-                const div = document.createElement("div");
-                div.className = `group-item p-3 border-b border-outline-variant cursor-pointer hover:bg-surface-container ${g.group_id === selectedGid ? 'bg-primary-container text-white' : ''}`;
-                div.dataset.gid = g.group_id;
-                const reviewMark = g.reviewed ? '<span class="material-symbols-outlined text-xs text-green-600" title="Reviewed — confirmed correct">check_circle</span>' : '';
-                const aiMark = (g.ai_flag && g.ai_flag.needs_review) ? '<span class="material-symbols-outlined text-xs text-secondary" title="AI flagged for review">smart_toy</span>' : '';
-                div.innerHTML = `
-                    <div class="font-data-mono text-xs font-label-caps flex items-center gap-1">
-                        <input type="checkbox" class="merge-check" data-gid="${g.group_id}" ${mergeSelected.has(g.group_id) ? 'checked' : ''} title="Select for merge">
-                        ${g.venue_id} ${reviewMark} ${aiMark} ${g.flags ? '<span class="material-symbols-outlined text-xs text-secondary">flag</span>' : ''}
-                    </div>
-                    <div class="font-semibold text-sm truncate">${g.titles[0] || '(untitled)'}</div>
-                    <div class="text-xs ${g.group_id === selectedGid ? 'text-white/70' : 'text-on-surface-variant'}">${g.group_size} Records, ${g.year_range}</div>
-                `;
-                div.addEventListener("click", (e) => {
-                    if (e.target.classList.contains("merge-check")) return;
-                    selectGroup(g.group_id);
-                });
-                div.querySelector(".merge-check").addEventListener("change", (e) => {
-                    const gid = parseInt(e.target.dataset.gid);
-                    if (e.target.checked) mergeSelected.add(gid); else mergeSelected.delete(gid);
-                    updateMergeBar();
-                });
-                list.appendChild(div);
-            }
-            updateMergeBar();
-            if (selectedGid === null && data.groups.length) selectGroup(data.groups[0].group_id);
+            return data;
         });
 }
 
-function selectGroup(gid) {
-    selectedGid = gid;
-    loadGroups();
-    const g = groupsCache.find((x) => x.group_id === gid) || groupsCache.find((x) => x.group_id === gid);
-    fetch(`/api/state/${STATE}/venues/groups?sort=${currentSort}&per_page=200`)
-        .then((r) => r.json())
-        .then((data) => {
-            const group = data.groups.find((x) => x.group_id === gid);
-            if (!group) return;
-            renderDetail(group);
+function renderList() {
+    const list = document.getElementById("group-list");
+    list.innerHTML = "";
+    if (!groupsCache.length) {
+        list.innerHTML = `<div class="p-4 text-xs text-on-surface-variant italic">No groups match this filter.</div>`;
+        updateMergeBar();
+        return;
+    }
+    for (const g of groupsCache) {
+        const isSel = g.group_id === selectedGid;
+        const div = document.createElement("div");
+        div.className = `group-item p-3 border-b border-outline-variant cursor-pointer hover:bg-surface-container ${isSel ? 'bg-primary-container text-white' : ''}`;
+        div.dataset.gid = g.group_id;
+        const reviewMark = g.reviewed ? '<span class="material-symbols-outlined text-xs text-green-600" title="Reviewed — confirmed correct">check_circle</span>' : '';
+        const aiMark = (g.ai_flag && g.ai_flag.needs_review) ? '<span class="material-symbols-outlined text-xs text-secondary" title="AI flagged for review">smart_toy</span>' : '';
+        div.innerHTML = `
+            <div class="font-data-mono text-xs font-label-caps flex items-center gap-1">
+                <input type="checkbox" class="merge-check" data-gid="${g.group_id}" ${mergeSelected.has(g.group_id) ? 'checked' : ''} title="Select for merge">
+                ${g.venue_id} ${reviewMark} ${aiMark} ${g.flags ? '<span class="material-symbols-outlined text-xs text-secondary">flag</span>' : ''}
+            </div>
+            <div class="font-semibold text-sm truncate">${g.titles[0] || '(untitled)'}</div>
+            <div class="group-sub text-xs ${isSel ? 'text-white/70' : 'text-on-surface-variant'}">${g.group_size} Records, ${g.year_range}</div>
+        `;
+        div.addEventListener("click", (e) => {
+            if (e.target.classList.contains("merge-check")) return;
+            selectGroup(g.group_id);
         });
+        div.querySelector(".merge-check").addEventListener("change", (e) => {
+            const gid = parseInt(e.target.dataset.gid);
+            if (e.target.checked) mergeSelected.add(gid); else mergeSelected.delete(gid);
+            updateMergeBar();
+        });
+        list.appendChild(div);
+    }
+    updateMergeBar();
+}
+
+// Select a group and render its detail from the cached page data — no network
+// round-trip, so keyboard navigation stays snappy.
+function selectGroup(gid, opts = {}) {
+    selectedGid = gid;
+    document.querySelectorAll(".group-item").forEach((el) => {
+        const isSel = parseInt(el.dataset.gid) === gid;
+        el.classList.toggle("bg-primary-container", isSel);
+        el.classList.toggle("text-white", isSel);
+        const sub = el.querySelector(".group-sub");
+        if (sub) {
+            sub.classList.toggle("text-white/70", isSel);
+            sub.classList.toggle("text-on-surface-variant", !isSel);
+        }
+        if (isSel && opts.scroll) el.scrollIntoView({ block: "nearest" });
+    });
+    const group = groupsCache.find((x) => x.group_id === gid);
+    if (group) renderDetail(group);
+}
+
+function renderPagination(data) {
+    const bar = document.getElementById("pagination-bar");
+    const total = data.total_pages || 1;
+    if (total <= 1) { bar.classList.add("hidden"); return; }
+    bar.classList.remove("hidden");
+    document.getElementById("page-indicator").textContent = `Page ${data.page + 1} / ${total}`;
+    document.getElementById("prev-page").disabled = data.page <= 0;
+    document.getElementById("next-page").disabled = data.page + 1 >= total;
+}
+
+// Move the selection up/down, wrapping across pages at the edges.
+function moveSelection(delta) {
+    const idx = groupsCache.findIndex((g) => g.group_id === selectedGid);
+    if (idx === -1) {
+        if (groupsCache.length) selectGroup(groupsCache[0].group_id, { scroll: true });
+        return;
+    }
+    const next = idx + delta;
+    if (next >= 0 && next < groupsCache.length) {
+        selectGroup(groupsCache[next].group_id, { scroll: true });
+    } else if (next < 0 && currentPage > 0) {
+        currentPage--;
+        fetchGroups("last");
+    } else if (next >= groupsCache.length && currentPage + 1 < totalPages) {
+        currentPage++;
+        fetchGroups("first");
+    }
 }
 
 function renderDetail(g) {
@@ -163,6 +248,7 @@ function renderDetail(g) {
             <td class="px-3 py-2 font-data-mono">${m.id}</td>
             <td class="px-3 py-2">${m.is_na_title ? `[NA: ${(m.description||'').slice(0,30)}]` : m.title}</td>
             <td class="px-3 py-2">${m.street_address || ''}, ${m.city || ''}</td>
+            <td class="px-3 py-2 text-on-surface-variant">${m.description || '—'}</td>
             <td class="px-3 py-2 font-data-mono">${m.year || '—'}</td>
             <td class="px-3 py-2"><button class="move-btn text-xs text-secondary hover:underline" data-id="${m.id}">Move…</button></td>
             <td class="px-3 py-2"><input type="checkbox" class="member-check" data-id="${m.id}"></td>
@@ -211,6 +297,7 @@ function renderDetail(g) {
                         <th class="text-left px-3 py-2">ID</th>
                         <th class="text-left px-3 py-2">Title</th>
                         <th class="text-left px-3 py-2">Address</th>
+                        <th class="text-left px-3 py-2">Description</th>
                         <th class="text-left px-3 py-2">Year</th>
                         <th class="text-left px-3 py-2">Move</th>
                         <th class="text-left px-3 py-2">Split</th>
@@ -231,7 +318,7 @@ function renderDetail(g) {
         }).then((r) => r.json()).then((res) => {
             if (res.error) { alert(res.error); return; }
             selectedGid = null;
-            loadSummary(); loadGroups();
+            loadSummary(); fetchGroups();
         });
     });
 
@@ -244,7 +331,7 @@ function renderDetail(g) {
         }).then((r) => r.json()).then((res) => {
             if (res.error) { alert(res.error); return; }
             selectedGid = null;
-            loadSummary(); loadGroups();
+            loadSummary(); fetchGroups();
         });
     });
 
@@ -254,7 +341,7 @@ function renderDetail(g) {
             body: JSON.stringify({ group_id: g.group_id }),
         }).then((r) => r.json()).then((res) => {
             if (res.error) { alert(res.error); return; }
-            loadSummary(); loadGroups();
+            loadSummary(); fetchGroups(selectedGid);
         });
     });
 
@@ -266,56 +353,62 @@ function renderDetail(g) {
             openMoveModal(recordId, label, g.group_id);
         });
     });
-
 }
 
+// The move target can be any group in the state, not just the current page, so
+// fetch the full group list (unpaged) to populate the destination dropdown.
 function openMoveModal(recordId, recordLabel, sourceGid) {
-    const others = groupsCache.filter((x) => x.group_id !== sourceGid)
-        .sort((a, b) => a.venue_id.localeCompare(b.venue_id));
-    const options = others.map((x) =>
-        `<option value="${x.group_id}">${x.venue_id} — ${(x.titles[0] || '(untitled)')} (${x.group_size} rec)</option>`
-    ).join("");
+    fetch(`/api/state/${STATE}/venues/groups?sort=venue_id&filter=all&per_page=100000`)
+        .then((r) => r.json())
+        .then((data) => {
+            const others = data.groups.filter((x) => x.group_id !== sourceGid)
+                .sort((a, b) => a.venue_id.localeCompare(b.venue_id));
+            const options = others.map((x) =>
+                `<option value="${x.group_id}">${x.venue_id} — ${(x.titles[0] || '(untitled)')} (${x.group_size} rec)</option>`
+            ).join("");
 
-    const overlay = document.createElement("div");
-    overlay.className = "fixed inset-0 bg-black/40 flex items-center justify-center z-50";
-    overlay.innerHTML = `
-        <div class="bg-surface-container-lowest rounded-lg shadow-xl w-[480px] max-w-[90vw] p-5">
-            <h3 class="font-display text-lg font-bold mb-1">Move Record</h3>
-            <p class="text-sm text-on-surface-variant mb-4">Moving <span class="font-semibold">${recordLabel}</span> (ID ${recordId}) to another venue group.</p>
-            <label class="font-label-caps text-on-surface-variant block mb-1">Destination venue</label>
-            <select id="move-target" class="w-full border border-outline-variant rounded px-3 py-2 mb-4 bg-surface-container-lowest text-sm">${options}</select>
-            <label class="font-label-caps text-on-surface-variant block mb-1">Note (optional)</label>
-            <input id="move-notes" type="text" class="w-full border border-outline-variant rounded px-3 py-2 mb-4 text-sm" placeholder="Why does this record belong there?">
-            <div class="flex justify-end gap-2">
-                <button id="move-cancel" class="px-4 py-2 rounded text-sm font-semibold bg-surface-container-high border border-outline-variant">Cancel</button>
-                <button id="move-confirm" class="px-4 py-2 rounded text-sm font-semibold bg-secondary text-white">Move</button>
-            </div>
-        </div>`;
-    document.body.appendChild(overlay);
+            const overlay = document.createElement("div");
+            overlay.className = "fixed inset-0 bg-black/40 flex items-center justify-center z-50";
+            overlay.innerHTML = `
+                <div class="bg-surface-container-lowest rounded-lg shadow-xl w-[480px] max-w-[90vw] p-5">
+                    <h3 class="font-display text-lg font-bold mb-1">Move Record</h3>
+                    <p class="text-sm text-on-surface-variant mb-4">Moving <span class="font-semibold">${recordLabel}</span> (ID ${recordId}) to another venue group.</p>
+                    <label class="font-label-caps text-on-surface-variant block mb-1">Destination venue</label>
+                    <select id="move-target" class="w-full border border-outline-variant rounded px-3 py-2 mb-4 bg-surface-container-lowest text-sm">${options}</select>
+                    <label class="font-label-caps text-on-surface-variant block mb-1">Note (optional)</label>
+                    <input id="move-notes" type="text" class="w-full border border-outline-variant rounded px-3 py-2 mb-4 text-sm" placeholder="Why does this record belong there?">
+                    <div class="flex justify-end gap-2">
+                        <button id="move-cancel" class="px-4 py-2 rounded text-sm font-semibold bg-surface-container-high border border-outline-variant">Cancel</button>
+                        <button id="move-confirm" class="px-4 py-2 rounded text-sm font-semibold bg-secondary text-white">Move</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
 
-    const close = () => overlay.remove();
-    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
-    overlay.querySelector("#move-cancel").addEventListener("click", close);
-    overlay.querySelector("#move-confirm").addEventListener("click", () => {
-        const targetGid = parseInt(overlay.querySelector("#move-target").value);
-        const notes = overlay.querySelector("#move-notes").value || "";
-        fetch(`/api/state/${STATE}/venues/reassign`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ record_id: recordId, source_group_id: sourceGid, target_group_id: targetGid, notes }),
-        }).then((r) => r.json()).then((res) => {
-            if (res.error) { alert(res.error); return; }
-            close();
-            selectedGid = null;
-            loadSummary(); loadGroups();
+            const close = () => overlay.remove();
+            overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+            overlay.querySelector("#move-cancel").addEventListener("click", close);
+            overlay.querySelector("#move-confirm").addEventListener("click", () => {
+                const targetGid = parseInt(overlay.querySelector("#move-target").value);
+                const notes = overlay.querySelector("#move-notes").value || "";
+                fetch(`/api/state/${STATE}/venues/reassign`, {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ record_id: recordId, source_group_id: sourceGid, target_group_id: targetGid, notes }),
+                }).then((r) => r.json()).then((res) => {
+                    if (res.error) { alert(res.error); return; }
+                    close();
+                    selectedGid = null;
+                    loadSummary(); fetchGroups();
+                });
+            });
         });
-    });
 }
 
 document.getElementById("merge-btn").addEventListener("click", () => {
     const ids = Array.from(mergeSelected);
     if (ids.length < 2) { alert("Select at least 2 groups to merge."); return; }
     const venueIds = ids.map((gid) => (groupsCache.find((x) => x.group_id === gid) || {}).venue_id).filter(Boolean);
-    if (!confirm(`Merge these ${ids.length} groups into one venue?\n\n${venueIds.join(", ")}`)) return;
+    const label = venueIds.length ? `\n\n${venueIds.join(", ")}` : "";
+    if (!confirm(`Merge these ${ids.length} groups into one venue?${label}`)) return;
     const notes = prompt("Optional note for this merge (why are these the same venue?):", "") || "";
     fetch(`/api/state/${STATE}/venues/merge`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -324,22 +417,24 @@ document.getElementById("merge-btn").addEventListener("click", () => {
         if (res.error) { alert(res.error); return; }
         mergeSelected.clear();
         selectedGid = null;
-        loadSummary(); loadGroups();
+        loadSummary(); fetchGroups();
     });
 });
 
 document.querySelectorAll(".sort-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
         currentSort = btn.dataset.sort;
+        currentPage = 0;
         document.querySelectorAll(".sort-btn").forEach((b) => b.className = "sort-btn flex-1 text-xs font-label-caps py-1 rounded bg-surface-container-high");
         btn.className = "sort-btn flex-1 text-xs font-label-caps py-1 rounded bg-primary text-white";
-        loadGroups();
+        fetchGroups("first");
     });
 });
 
 document.querySelectorAll(".filter-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
         currentFilter = btn.dataset.filter;
+        currentPage = 0;
         selectedGid = null;
         document.querySelectorAll(".filter-btn").forEach((b) => {
             b.classList.remove("bg-primary", "text-white");
@@ -347,8 +442,15 @@ document.querySelectorAll(".filter-btn").forEach((btn) => {
         });
         btn.classList.remove("bg-surface-container-high");
         btn.classList.add("bg-primary", "text-white");
-        loadGroups();
+        fetchGroups("first");
     });
+});
+
+document.getElementById("prev-page").addEventListener("click", () => {
+    if (currentPage > 0) { currentPage--; fetchGroups("first"); }
+});
+document.getElementById("next-page").addEventListener("click", () => {
+    if (currentPage + 1 < totalPages) { currentPage++; fetchGroups("first"); }
 });
 
 document.getElementById("ai-review-btn").addEventListener("click", () => {
@@ -366,7 +468,7 @@ document.getElementById("ai-review-btn").addEventListener("click", () => {
         delete status.dataset.running;
         if (result.status === "done") {
             status.textContent = "AI review complete.";
-            loadSummary(); loadGroups();
+            loadSummary(); fetchGroups();
         } else {
             status.textContent = "AI review failed — see log.";
         }
@@ -376,13 +478,17 @@ document.getElementById("ai-review-btn").addEventListener("click", () => {
 document.addEventListener("keydown", (e) => {
     if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    if (e.key.toLowerCase() === "r") {
-        const btn = document.getElementById("review-btn");
-        if (btn) { e.preventDefault(); btn.click(); }
-    }
+    // Ignore list navigation while a modal (e.g. Move) is open.
+    if (document.querySelector(".fixed.inset-0")) return;
+    const k = e.key.toLowerCase();
+    if (k === "j" || e.key === "ArrowDown") { e.preventDefault(); moveSelection(1); }
+    else if (k === "k" || e.key === "ArrowUp") { e.preventDefault(); moveSelection(-1); }
+    else if (e.key === "ArrowRight" || k === "]") { e.preventDefault(); if (currentPage + 1 < totalPages) { currentPage++; fetchGroups("first"); } }
+    else if (e.key === "ArrowLeft" || k === "[") { e.preventDefault(); if (currentPage > 0) { currentPage--; fetchGroups("first"); } }
+    else if (k === "r") { const btn = document.getElementById("review-btn"); if (btn) { e.preventDefault(); btn.click(); } }
 });
 
 loadSummary();
-loadGroups();
+fetchGroups("first");
 </script>
 {% endblock %}
