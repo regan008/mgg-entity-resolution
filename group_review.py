@@ -168,11 +168,16 @@ def review_state(state: str) -> pd.DataFrame:
                 "year": None if pd.isna(r.get("year")) else int(r["year"]),
                 "description": "" if pd.isna(r.get("description")) else str(r["description"]),
             })
-        groups.append({"venue_id": venue_id, "group_size": len(rows), "members": members})
+        # Record the member location_ids so the review UI can key each flag to the
+        # exact group the AI judged (survives venue_id changes; auto-drops if the
+        # group is later edited). See _load_group_flags in dashboard/routes/venue_routes.py.
+        member_ids = sorted(int(x) for x in rows["location_id"])
+        groups.append({"venue_id": venue_id, "member_ids": member_ids,
+                       "group_size": len(rows), "members": members})
 
     if not groups:
         logger.info(f"No multi-record groups to review for state={state}")
-        pd.DataFrame(columns=["venue_id", "group_size", "needs_review",
+        pd.DataFrame(columns=["venue_id", "member_ids", "group_size", "needs_review",
                               "confidence", "rationale", "flag_type"]).to_csv(output_path, index=False)
         return pd.DataFrame()
 
@@ -192,6 +197,7 @@ def review_state(state: str) -> pd.DataFrame:
             needs = bool(d.get("needs_review", False))
             results.append({
                 "venue_id": g["venue_id"],
+                "member_ids": json.dumps(g["member_ids"]),
                 "group_size": g["group_size"],
                 "needs_review": needs,
                 "confidence": d.get("confidence"),

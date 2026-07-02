@@ -119,13 +119,13 @@ def _load_state(state: str, force: bool = False) -> dict:
     for gid in groups:
         groups[gid].sort(key=lambda r: r["year"] or 0)
 
-    # Attach optional AI group-review flags (from group_review.py), keyed by venue_id.
-    flags_by_venue = _load_group_flags(working_dir)
-    for gid, m in meta.items():
-        m["ai_flag"] = flags_by_venue.get(m["venue_id"])
+    # Optional AI group-review flags (from group_review.py), keyed by member-ID
+    # set. Stored on the cache and looked up per request via _ai_flag_for() so a
+    # flag never rides along with a group whose membership has since changed.
+    ai_flags = _load_group_flags(working_dir)
 
     _CACHE[state] = {
-        "groups": groups, "meta": meta, "records": records,
+        "groups": groups, "meta": meta, "records": records, "ai_flags": ai_flags,
         "working_dir": working_dir, "edit_log": _load_edit_log(working_dir), "state": state,
     }
     return _CACHE[state]
@@ -162,8 +162,16 @@ def _load_edit_log(working_dir: str) -> list[dict]:
 
 
 def _load_group_flags(working_dir: str) -> dict:
-    """Load optional AI group-review flags into {venue_id: {needs_review, confidence,
-    rationale}}. Returns {} if group_review.py hasn't been run for this state."""
+    """Load optional AI group-review flags keyed by the frozenset of member
+    location_ids the AI actually judged: {frozenset(member_ids): {needs_review,
+    confidence, rationale}}. Matching on membership (not venue_id) means a flag
+    attaches to a group only while its membership is unchanged, so any later
+    split/merge/reassign drops it — mirroring how reviewed status works.
+
+    Returns {} if group_review.py hasn't been run, or if the flags file predates
+    the member_ids column (legacy venue_id-only flags can't be safely matched
+    after edits, so we ignore them rather than risk showing them on the wrong
+    group — re-run group_review.py to regenerate)."""
     path = os.path.join(working_dir, "group_flags.csv")
     if not os.path.exists(path):
         return {}
@@ -171,9 +179,17 @@ def _load_group_flags(working_dir: str) -> dict:
         df = pd.read_csv(path)
     except (pd.errors.EmptyDataError, FileNotFoundError):
         return {}
+    if "member_ids" not in df.columns:
+        return {}
     out = {}
     for _, r in df.iterrows():
-        out[r["venue_id"]] = {
+        if pd.isna(r.get("member_ids")):
+            continue
+        try:
+            member_ids = frozenset(int(x) for x in json.loads(r["member_ids"]))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            continue
+        out[member_ids] = {
             "needs_review": bool(r["needs_review"]),
             "confidence": None if pd.isna(r.get("confidence")) else float(r["confidence"]),
             "rationale": "" if pd.isna(r.get("rationale")) else str(r["rationale"]),
@@ -199,6 +215,12 @@ def _group_membership(cache, gid) -> frozenset:
     return frozenset(m["id"] for m in cache["groups"].get(gid, []))
 
 
+def _ai_flag_for(cache, gid):
+    """The AI review flag for a group, matched by its current membership, or None
+    if the group is unflagged or its membership no longer matches what the AI saw."""
+    return cache.get("ai_flags", {}).get(_group_membership(cache, gid))
+
+
 def _has_duplicate_years(cache, gid):
     years = [m["year"] for m in cache["groups"].get(gid, []) if m["year"]]
     return len(years) != len(set(years))
@@ -216,12 +238,6 @@ def _update_group_meta(cache, gid):
         return
     cache["meta"][gid]["group_size"] = len(members)
     cache["meta"][gid]["resolution_method"] = "manual_edit"
-
-
-def _reassign_venue_ids(cache):
-    sorted_gids = sorted(cache["meta"].keys(), key=lambda g: min(m["id"] for m in cache["groups"][g]))
-    for seq, gid in enumerate(sorted_gids):
-        cache["meta"][gid]["venue_id"] = config.VENUE_ID_FORMAT.format(state=cache["state"], seq=seq + 1)
 
 
 def _log_edit(cache, action, details):
@@ -242,7 +258,9 @@ def _save_edit_log(cache):
 
 
 def _save_draft(cache):
-    _reassign_venue_ids(cache)
+    # Venue IDs are stable: each group keeps the ID it was created with. Deletes
+    # and merges leave gaps; splits mint a fresh, never-reused ID. We therefore
+    # persist the existing meta venue_ids as-is and never renumber.
     rows = []
     for gid in sorted(cache["meta"].keys()):
         meta = cache["meta"][gid]
@@ -279,8 +297,8 @@ def api_summary(code):
 
     reviewed_sets = _reviewed_memberships(cache)
     n_reviewed = sum(1 for gid in meta if _group_membership(cache, gid) in reviewed_sets)
-    n_ai_flagged = sum(1 for m in meta.values() if (m.get("ai_flag") or {}).get("needs_review"))
-    has_ai_review = any(m.get("ai_flag") is not None for m in meta.values())
+    n_ai_flagged = sum(1 for gid in meta if (_ai_flag_for(cache, gid) or {}).get("needs_review"))
+    has_ai_review = bool(cache.get("ai_flags"))
     splits = sum(1 for e in cache["edit_log"] if e["action"] == "split")
     merges = sum(1 for e in cache["edit_log"] if e["action"] == "merge")
     reassigns = sum(1 for e in cache["edit_log"] if e["action"] == "reassign")
@@ -314,7 +332,7 @@ def api_groups(code):
     elif filter_type == "dup_years":
         gids = [g for g in gids if _has_duplicate_years(cache, g)]
     elif filter_type == "ai_flagged":
-        gids = [g for g in gids if (meta[g].get("ai_flag") or {}).get("needs_review")]
+        gids = [g for g in gids if (_ai_flag_for(cache, g) or {}).get("needs_review")]
     elif filter_type == "reviewed":
         reviewed_sets = _reviewed_memberships(cache)
         gids = [g for g in gids if _group_membership(cache, g) in reviewed_sets]
@@ -353,7 +371,7 @@ def api_groups(code):
             "flags": m["flags"], "year_range": year_range, "titles": list(titles)[:5],
             "cities": list(set(mm["city"] for mm in members if mm["city"])), "members": members,
             "reviewed": _group_membership(cache, gid) in reviewed_sets,
-            "ai_flag": m.get("ai_flag"),
+            "ai_flag": _ai_flag_for(cache, gid),
         })
 
     return jsonify({
@@ -384,11 +402,14 @@ def api_split(code):
     cache["groups"][source_gid] = remaining
     cache["groups"][new_gid] = new_members
     cache["meta"][new_gid] = {
-        "venue_id": "", "group_size": len(new_members), "resolution_method": "manual_edit",
+        # new_gid is max(existing)+1, so seq new_gid+1 is larger than every
+        # existing venue seq — a fresh ID that is never reused, even if lower
+        # IDs were freed by earlier deletes/merges.
+        "venue_id": config.VENUE_ID_FORMAT.format(state=cache["state"], seq=new_gid + 1),
+        "group_size": len(new_members), "resolution_method": "manual_edit",
         "min_composite_score": cache["meta"][source_gid].get("min_composite_score"), "flags": "",
     }
     _update_group_meta(cache, source_gid)
-    _reassign_venue_ids(cache)
     _save_draft(cache)
     _log_edit(cache, "split", {
         "source_group": source_gid, "source_venue_id": cache["meta"].get(source_gid, {}).get("venue_id", ""),
@@ -427,7 +448,7 @@ def api_merge(code):
 
     cache["groups"][target_gid] = sorted(unique_members, key=lambda r: r["year"] or 0)
     _update_group_meta(cache, target_gid)
-    _reassign_venue_ids(cache)
+    # Survivor keeps its venue_id; the merged-away groups' IDs retire (leave gaps).
     _save_draft(cache)
     _log_edit(cache, "merge", {
         "merged_groups": group_ids, "merged_venue_ids": merged_venue_ids, "target_group": target_gid,
@@ -456,7 +477,6 @@ def api_reassign(code):
     cache["groups"][target_gid].sort(key=lambda r: r["year"] or 0)
     _update_group_meta(cache, source_gid)
     _update_group_meta(cache, target_gid)
-    _reassign_venue_ids(cache)
     _save_draft(cache)
     _log_edit(cache, "reassign", {
         "record_id": record_id, "from_group": source_gid, "to_group": target_gid, "notes": notes,
@@ -484,7 +504,7 @@ def api_delete(code):
 
     del cache["groups"][gid]
     del cache["meta"][gid]
-    _save_draft(cache)  # also renumbers remaining venue IDs
+    _save_draft(cache)  # remaining groups keep their venue IDs; this one's ID retires (gap)
     _log_edit(cache, "delete", {
         "group_id": gid, "venue_id": venue_id, "member_ids": member_ids,
         "group_size": group_size, "notes": notes,
