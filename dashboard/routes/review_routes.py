@@ -1,10 +1,10 @@
 """
-Pair Review screen — ports review_app.py's CSV read/write logic, parameterized
-by state instead of a single global state. Writes the exact same
-human_review_decisions.csv schema so review.py {state} (unmodified) can still
-merge results.
+Pair Review screen, parameterized by state. Writes the same
+human_review_decisions.csv schema that review.py {state} (unmodified) merges
+back into the pipeline.
 
-review_app.py itself is left completely untouched on disk.
+Originated as a port of the standalone review_app.py, which has since been
+retired in favor of this dashboard screen.
 """
 import csv
 import os

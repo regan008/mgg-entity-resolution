@@ -1,9 +1,10 @@
 """
-MGG Entity Resolution Dashboard — unified control panel over the existing
-pipeline. Reads the same CSVs the pipeline scripts produce, launches those
-scripts as subprocesses, and writes only the same human-review / venue-edit
-CSVs the original review_app.py / venue_review_app.py wrote. No pipeline
-script, config.py, or mgg.db schema is modified by this app.
+MGG Entity Resolution Dashboard — unified control panel over the pipeline, and
+the home of the human-review UIs (pair review and venue-group review, which
+replaced the retired standalone review_app.py / venue_review_app.py). Reads the
+CSVs the pipeline scripts produce, launches those scripts as subprocesses, and
+writes the human-review / venue-edit CSVs. The batch pipeline scripts,
+config.py, and the mgg.db schema are not modified by this app.
 
 Usage:
     python dashboard/app.py            # serves on port 5050

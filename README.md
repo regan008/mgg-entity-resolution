@@ -18,10 +18,10 @@ Records are processed one state at a time through 9 stages:
 | 2 | Block | `block.py` | `candidate_pairs.csv` |
 | 3 | Score | `score.py` | `scored_pairs.csv` |
 | 4 | Adjudicate | `adjudicate.py` | `adjudicated_pairs.csv`, `human_review_pairs.csv` |
-| 5 | Pair Review | dashboard or `review_app.py` | `human_review_decisions.csv` |
+| 5 | Pair Review | dashboard (`dashboard/app.py`) | `human_review_decisions.csv` |
 | 6 | Consolidate | `consolidate.py` | `consolidated_groups.csv` |
 | 7 | Assign IDs (draft) | `assign_ids.py` | `venue_assignments_draft.csv` |
-| 8 | Venue Review | dashboard or `venue_review_app.py` | `venue_assignments_approved.csv` |
+| 8 | Venue Review | dashboard (`dashboard/app.py`) | `venue_assignments_approved.csv` |
 | 9 | Commit | `assign_ids.py --commit` | writes to `mgg.db` → `venue_assignments` |
 
 Run any stage with: `python3 {script}.py {STATE}` (e.g. `python3 preprocess.py WY`)

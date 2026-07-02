@@ -36,11 +36,11 @@ A state is "done" when stage 9 completes and venue IDs are ready to commit to th
 | 2 | Block | `block.py` | `candidate_pairs.csv` | candidate pairs generated, compression ratio vs. O(n²), tier-1/tier-2/cross-tier breakdown |
 | 3 | Score | `score.py` | `scored_pairs.csv` | total pairs scored, auto-match count (≥0.75), AI-review count (0.50–0.75), auto-reject count (<0.50), mean/median composite score |
 | 4 | Adjudicate | `adjudicate.py` | `adjudicated_pairs.csv`, `human_review_pairs.csv`, `edge_cases.csv` | Gemini-matched / rejected / uncertain, high-confidence auto-accepted (≥0.90), signal-disagreement count, edge-case count. **Shows API cost from `api_calls.csv`** (tokens, input/output cost, running total per state). Supports `--resume` after interruption. |
-| 5 | Human Review | `review_app.py` (Flask, port 5000) + `review.py` | `human_review_decisions.csv` | total pairs queued, reviewed so far, confirmed vs overridden, Gemini accuracy (overall, on matches, on rejects) |
+| 5 | Human Review | dashboard pair-review screen + `review.py` | `human_review_decisions.csv` | total pairs queued, reviewed so far, confirmed vs overridden, Gemini accuracy (overall, on matches, on rejects) |
 | 6 | Consolidate | `consolidate.py` | `consolidated_groups.csv` | venue groups created, singletons, multi-record groups, largest group, flagged groups (cross-state/distance) |
 | 7 (opt) | Validate Groups | `validate_groups.py` (AI QA pass) | `flagged_groups.csv`, `validation_report.csv` | groups checked, flags raised (likely false positives / false negatives), **estimated cost to run this optional stage** |
 | 8 | Assign IDs | `assign_ids.py` | `venue_assignments_draft.csv` | unique venue IDs assigned, records grouped, ready for venue review |
-| 9 | Venue Review | `venue_review_app.py` (Flask, port 5002) | `venue_assignments.csv`, `venue_edit_log.csv` | groups reviewed, splits / merges / reassigns applied, ready-to-commit flag |
+| 9 | Venue Review | dashboard venue-review screen | `venue_assignments.csv`, `venue_edit_log.csv` | groups reviewed, splits / merges / reassigns applied, ready-to-commit flag |
 
 ---
 

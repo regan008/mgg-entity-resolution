@@ -1,10 +1,12 @@
 """
-Venue Group Review screen — ports venue_review_app.py's CSV read/write logic,
-parameterized by state. Writes the exact same venue_edit_log.csv schema and
-regenerates venue_assignments_draft.csv / venue_assignments_approved.csv the
-same way the original app does.
+Venue Group Review screen. Writes venue_edit_log.csv and regenerates
+venue_assignments_draft.csv / venue_assignments_approved.csv, parameterized by
+state.
 
-venue_review_app.py itself is left completely untouched on disk.
+This originated as a port of the standalone venue_review_app.py (now retired),
+and has since diverged: venue IDs are stable (no renumbering on edit) and AI
+group-review flags are keyed by member-ID set. See PIPELINE_DOCUMENTATION.md →
+"Venue Group Review (dashboard)".
 """
 import csv
 import json

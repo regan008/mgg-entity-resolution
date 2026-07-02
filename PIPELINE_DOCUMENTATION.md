@@ -250,32 +250,11 @@ All scored_pairs columns plus: `decision`, `method`, `ai_confidence`, `ai_ration
 
 Two components work together: a Flask web app for making decisions, and a script to merge those decisions back into the pipeline.
 
-### 5a. Review App (`review_app.py`)
+### 5a. Pair Review (dashboard)
 
 **Purpose**: Browser-based interface for reviewing AI-adjudicated pairs. Shows side-by-side record comparison with scores, AI decision, and rationale.
 
-**Port**: 5001 (default; configurable with `--port`)
-**Usage**: `python review_app.py WY`
-
-#### Key Functions
-
-| Function | Location | Description |
-|----------|----------|-------------|
-| `load_data(state)` | `review_app.py:29` | Load review pairs, preprocessed records, types/amenities, existing decisions |
-| `_load_types_amenities()` | `review_app.py:59` | Join location types and amenities from SQLite |
-| `_build_pair_response(index)` | `review_app.py:109` | Build JSON response for a single pair with full record details |
-| `_write_decisions_csv()` | `review_app.py:326` | Write all decisions to CSV (full rewrite for consistency) |
-
-#### Key Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | Render review interface (`templates/review.html`) |
-| `/api/pair/<idx>` | GET | Get single pair with full record details |
-| `/api/pairs` | GET | Get paginated pairs for batch view (supports filtering) |
-| `/api/decide` | POST | Save single decision (match/reject/skip) |
-| `/api/decide_batch` | POST | Save multiple decisions at once |
-| `/api/stats` | GET | Review progress: total, reviewed, matches, rejects, skips |
+Pair review runs in the **dashboard** (`dashboard/app.py`, default port 5050): open a state's pipeline page and go to the Pair Review screen. The standalone `review_app.py` has been **retired** — its CSV read/write logic is ported into `dashboard/routes/review_routes.py`, and the screen template is `dashboard/templates/pair_review.html`. It reads/writes the same `human_review_decisions.csv` schema described below.
 
 #### Features
 
@@ -404,47 +383,29 @@ python assign_ids.py WY --commit     # Write approved assignments to SQLite
 ### Draft/Approve/Commit Workflow
 
 1. `python assign_ids.py WY` → generates `venue_assignments_draft.csv`
-2. `python venue_review_app.py WY` → review and edit groups in browser
-3. Approve in the app → creates `venue_assignments_approved.csv`
+2. Review and edit groups in the dashboard (`python dashboard/app.py` → WY venue-review screen)
+3. Approve in the dashboard → creates `venue_assignments_approved.csv`
 4. `python assign_ids.py WY --commit` → writes to SQLite
 
 ---
 
-## Venue Group Review App (`venue_review_app.py`)
+## Venue Group Review (dashboard)
 
-**Purpose**: Browser-based interface for reviewing venue groups before committing to SQLite. Supports split, merge, and reassign operations.
+**Purpose**: Browser-based interface for reviewing venue groups before committing to SQLite. Supports split, merge, reassign, delete, and "mark reviewed", plus an optional AI group-review flag filter.
 
-**Port**: 5002 (default; configurable with `--port`)
-**Usage**: `python venue_review_app.py WY`
+Venue review runs in the **dashboard** (`dashboard/app.py`, default port 5050): open a state's pipeline page and go to the Venue Review screen. The standalone `venue_review_app.py` has been **retired** — its CSV read/write logic is ported into `dashboard/routes/venue_routes.py` (screen template `dashboard/templates/venue_review.html`), writing the same `venue_assignments_draft.csv` / `venue_assignments_approved.csv` / `venue_edit_log.csv` files.
 
-### Key Functions
+**Venue IDs are stable.** Each group keeps the ID it was created with. Deletes and merges leave gaps; a split mints a fresh, never-reused ID (`max(existing)+1`). The pipeline no longer renumbers venue IDs on edit — gaps are harmless because `assign_ids.py --commit` writes venue IDs verbatim.
 
-| Function | Location | Description |
-|----------|----------|-------------|
-| `load_data(state)` | `venue_review_app.py:37` | Load draft assignments, preprocessed records, types/amenities |
-| `_update_group_meta(gid)` | `venue_review_app.py:234` | Recalculate group size/method after edit |
-| `_reassign_venue_ids()` | `venue_review_app.py:246` | Reassign all venue IDs sequentially after edits |
-| `_log_edit(action, details)` | `venue_review_app.py:253` | Log edit operation for audit trail |
-| `_save_draft()` | `venue_review_app.py:280` | Regenerate draft CSV from in-memory state |
-
-### Key Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | Render review interface (`templates/venue_review.html`) |
-| `/api/summary` | GET | Summary stats: groups, records, singletons, method breakdown |
-| `/api/groups` | GET | Paginated groups with sorting (size/venue_id/method/flags) and filtering (all/multi/singletons/flagged) |
-| `/api/split` | POST | Move selected records from a group into a new group |
-| `/api/merge` | POST | Combine multiple groups into one |
-| `/api/reassign` | POST | Move a single record from one group to another |
-| `/api/edit_log` | GET | Return full audit trail of edits |
-| `/api/approve` | POST | Copy draft to approved file |
+**AI group-review flags** (optional, from `group_review.py`) are keyed to the group's member-ID set, so a flag matches a group only while its membership is unchanged — any split/merge/reassign automatically drops it (mirroring how "reviewed" status works). Regenerate flags by re-running group review after edits.
 
 ### Edit Operations
 
 - **Split**: Select records within a group → move them to a new group. The source group keeps remaining records.
-- **Merge**: Select 2+ group checkboxes → merge all into the group with the lowest ID.
-- **Reassign**: Click "Move" on any record → pick a target group (with search) → record moves to target.
+- **Merge**: Select 2+ group checkboxes → merge all into the group with the lowest ID (survivor keeps its ID; the others' IDs retire as gaps).
+- **Reassign ("Move")**: Pick a target group for a single record → record moves to target.
+- **Delete**: Drop a whole group and its records from the draft (e.g. a cruising area that slipped the filter) — those records get no venue ID on commit.
+- **Mark Reviewed** (`R`): Confirm a group is correct as-is. Auto-clears if the group is later edited.
 
 All edits are logged to `working/{state}/venue_edit_log.csv` with timestamps and full details.
 
@@ -538,11 +499,11 @@ All constants are defined in [`config.py`](config.py) (112 lines).
 | `block.py` | 2 | Candidate pair generation |
 | `score.py` | 3 | Pairwise similarity scoring |
 | `adjudicate.py` | 4 | Tiered decisions + AI adjudication |
-| `review_app.py` | 5a | Flask app for human pair review (port 5001) |
 | `review.py` | 5b | Merge human decisions into adjudicated_pairs |
 | `consolidate.py` | 6 | Union-Find transitive closure |
 | `assign_ids.py` | 7 | Venue ID assignment + SQLite commit |
-| `venue_review_app.py` | 7 | Flask app for group review (port 5002) |
+| `group_review.py` | 7.5 (opt) | AI group review → `group_flags.csv` |
+| `dashboard/app.py` | 5a, 7 | Dashboard: pipeline control + pair review & venue review UIs (port 5050) |
 
 ### Output CSVs (per state, in `working/{state}/`)
 
@@ -565,16 +526,16 @@ All constants are defined in [`config.py`](config.py) (112 lines).
 
 | File | Used By | Description |
 |------|---------|-------------|
-| `templates/review.html` | `review_app.py` | Single-page review interface (single + batch views) |
-| `templates/venue_review.html` | `venue_review_app.py` | Group review interface with split/merge/reassign |
+| `dashboard/templates/pair_review.html` | dashboard (`review_routes.py`) | Pair review interface (single + batch views) |
+| `dashboard/templates/venue_review.html` | dashboard (`venue_routes.py`) | Venue group review interface (split / merge / reassign / delete) |
 
 ---
 
 ## Web Interfaces
 
-### Pair Review (`review_app.py`, port 5001)
+Both review UIs live in the dashboard. Start it with `python dashboard/app.py` (default port 5050) and open a state's pipeline page.
 
-Start: `python review_app.py WY`
+### Pair Review (dashboard)
 
 - Side-by-side record comparison with full details (title, address, city, year, description, lat/lon, types, amenities)
 - Score breakdown with color coding (composite, embedding, JW, address overlap)
@@ -582,15 +543,12 @@ Start: `python review_app.py WY`
 - Single view (one pair at a time) and Batch view (table with multi-select)
 - Progress tracking and filtering
 
-### Group Review (`venue_review_app.py`, port 5002)
+### Group Review (dashboard)
 
-Start: `python venue_review_app.py WY`
-
-- Expandable group cards with member record tables
-- Sort by size, venue_id, method, or flags
-- Filter: all groups, multi-record only, singletons, flagged
-- Split, merge, and reassign operations with audit trail
-- Approve button copies draft to approved file
+- Two-pane list + detail: the group list scrolls independently, is paginated, and is keyboard-navigable (`J`/`K` or arrows; `R` marks the current group reviewed)
+- Sort by size or flags; filter by all, to-review, reviewed, or AI-flagged
+- Split, merge, reassign, and delete operations with an audit trail
+- Approve button copies the draft to the approved file
 
 ---
 

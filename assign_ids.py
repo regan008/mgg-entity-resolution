@@ -111,7 +111,7 @@ def assign_ids(state: str):
     })
 
     print(f"\nDraft saved to {draft_path}")
-    print(f"Review with: python venue_review_app.py {state}")
+    print(f"Review in the dashboard: python dashboard/app.py  (open the {state} pipeline page)")
     print(f"After review: python assign_ids.py {state} --commit")
 
 

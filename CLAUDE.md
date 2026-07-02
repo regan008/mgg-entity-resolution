@@ -19,12 +19,18 @@ This is an **entity resolution pipeline** for the [Mapping the Gay Guides](https
 2. block.py        →  Generate candidate pairs via geohash + name-similarity blocking
 3. score.py        →  Compute embedding, Jaro-Winkler, and address overlap scores
 4. adjudicate.py   →  Auto-match (≥0.75), auto-reject (<0.50), AI adjudicate middle range
-5. review_app.py   →  Flask UI (port 5001) for human pair review; review.py merges decisions
+5. (pair review)   →  Human pair review in the dashboard; review.py merges decisions into adjudicated_pairs.csv
 6. consolidate.py  →  Union-Find transitive closure into venue groups
-7. assign_ids.py   →  Assign venue IDs (WY-00001); venue_review_app.py (port 5002) for group review
+7. assign_ids.py   →  Assign venue IDs (WY-00001); group review happens in the dashboard
 ```
 
-Run any stage: `python3 {script}.py {STATE}` (e.g., `python3 preprocess.py WY`)
+Run any batch stage: `python3 {script}.py {STATE}` (e.g., `python3 preprocess.py WY`).
+
+**Human review (pair review and venue-group review) lives entirely in the dashboard**
+(`dashboard/app.py`, default port 5050). The old standalone Flask apps
+(`review_app.py`, `venue_review_app.py`) have been retired — their read/write logic
+is ported into `dashboard/routes/review_routes.py` and `dashboard/routes/venue_routes.py`.
+Launch the dashboard with `python3 dashboard/app.py` and open a state's pipeline page.
 
 ## Key Files
 
