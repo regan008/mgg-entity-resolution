@@ -6,22 +6,30 @@ This is an **entity resolution pipeline** for the [Mapping the Gay Guides](https
 
 ## Current Status
 
-- **Wyoming (WY)** is fully complete: 358 records → 70 venue groups → 69 unique venues (after manual edits)
-- All 7 pipeline stages are built and tested
-- Stats logging (`pipeline_stats.py`) is integrated into every stage; WY stats are in `pipeline_stats.csv`
-- Comprehensive docs are in `PIPELINE_DOCUMENTATION.md`
-- Ready to scale to additional states
+_Last updated 2026-08-25._
+
+- **Wyoming (WY)** is complete and committed to `mgg.db`: **253 brick-and-mortar records → 57 unique venues**. This is the first state finished under the rebuilt pipeline and supersedes the April prototype result (358 records → 69 venues, which included cruising areas and used Claude Haiku).
+- **South Carolina (SC)** is in progress: 1,028 records → 350 draft venues, partway through venue review.
+- Scope is **brick-and-mortar only** — cruising areas (`amenity_id=90`) are dropped in `preprocess.py`.
+- AI adjudication runs on **Gemini Flash Lite**; per-call cost is logged to `api_calls.csv`.
+- Stats logging (`pipeline_stats.py`) is integrated into every stage → `pipeline_stats.csv`.
+- Full reference in `PIPELINE_DOCUMENTATION.md`; decision record in `project_history.md`.
+
+**Known limitation**: cruising-area exclusion depends on `amenity_id=90` being set in the source. Untagged cruising locations pass the filter and must be deleted by hand in venue review — and deleting removes them from the draft only, so re-running `assign_ids.py` reintroduces them.
 
 ## Pipeline Architecture
 
 ```
-1. preprocess.py   →  Normalize text, classify geocode tiers, flag NA-title records
-2. block.py        →  Generate candidate pairs via geohash + name-similarity blocking
-3. score.py        →  Compute embedding, Jaro-Winkler, and address overlap scores
-4. adjudicate.py   →  Auto-match (≥0.75), auto-reject (<0.50), AI adjudicate middle range
-5. (pair review)   →  Human pair review in the dashboard; review.py merges decisions into adjudicated_pairs.csv
-6. consolidate.py  →  Union-Find transitive closure into venue groups
-7. assign_ids.py   →  Assign venue IDs (WY-00001); group review happens in the dashboard
+1. preprocess.py    →  Drop cruising areas, normalize text, classify geocode tiers, flag NA-title records
+2. block.py         →  Generate candidate pairs via geohash + name-similarity blocking
+3. score.py         →  Compute embedding, Jaro-Winkler, and address overlap scores
+4. adjudicate.py    →  Auto-match (≥0.75), auto-reject (<0.50), Gemini adjudicates the middle range
+5. (pair review)    →  Human pair review in the dashboard; review.py merges decisions into adjudicated_pairs.csv
+6. consolidate.py   →  Union-Find transitive closure into venue groups
+7. assign_ids.py    →  Assign draft venue IDs (WY-00001)
+8. group_review.py  →  OPTIONAL: Gemini flags questionable groups → group_flags.csv (advisory only)
+9. (venue review)   →  Human group review in the dashboard, then Approve
+10. assign_ids.py --commit  →  Write approved assignments to mgg.db
 ```
 
 Run any batch stage: `python3 {script}.py {STATE}` (e.g., `python3 preprocess.py WY`).
@@ -32,12 +40,31 @@ Run any batch stage: `python3 {script}.py {STATE}` (e.g., `python3 preprocess.py
 is ported into `dashboard/routes/review_routes.py` and `dashboard/routes/venue_routes.py`.
 Launch the dashboard with `python3 dashboard/app.py` and open a state's pipeline page.
 
+Venue group review offers two interchangeable views, both able to split, merge,
+reassign, delete, mark-reviewed, and approve:
+- **Card view** (`/state/<code>/venues`) — one group at a time with its temporal
+  distribution, AI rationale banner, and per-record actions.
+- **Table view** (`/state/<code>/venues/table`) — flat spreadsheet, one row per
+  record, each group color-blocked. Sort by title or address to surface
+  near-duplicate venues that landed in *different* groups (the merge cue).
+
+**Approve → Commit rule**: Approve writes a point-in-time snapshot
+(`venue_assignments_approved.csv`), and `assign_ids.py --commit` reads that
+snapshot, not the live draft. **Any edit after approving requires re-approving
+before committing.** This is enforced — the commit refuses when the draft is
+newer, and the dashboard warns and disables the Commit button. Note that
+template/Python edits require a dashboard restart to take effect (debug is off).
+
 ## Key Files
 
 | File | Purpose |
 |------|---------|
 | `config.py` | All thresholds, weights, paths, model names |
 | `pipeline_stats.py` | `StatsTracker` class — logs metrics per stage to `pipeline_stats.csv` |
+| `api_cost_tracker.py` | `APICostTracker` — logs per-call Gemini token usage/cost to `api_calls.csv` |
+| `group_review.py` | Optional AI pass flagging questionable venue groups → `group_flags.csv` |
+| `dashboard/` | Flask control panel (port 5050): run stages, pair review, venue review, costs |
+| `working/{state}/venue_edit_log.csv` | Every human venue-review action (split/merge/reassign/delete/review/approve) |
 | `mgg.db` | SQLite database (do not commit to git — too large) |
 | `PIPELINE_DOCUMENTATION.md` | Full reference with function-level `file:line` links |
 | `working/{state}/` | Intermediate CSVs per state |
