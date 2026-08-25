@@ -121,7 +121,15 @@ def api_states():
 
 @dashboard_bp.route("/api/state/<code>/stage/<stage_key>")
 def api_stage_detail(code, stage_key):
-    return jsonify(data.stage_detail(code.upper(), stage_key))
+    code = code.upper()
+    detail = data.stage_detail(code, stage_key)
+    if stage_key == "commit":
+        # Surface unapproved venue-review edits here: assign_ids.py --commit
+        # reads the approved snapshot, so a stale snapshot would commit the
+        # wrong data. The script refuses in that case; warn before they click.
+        from routes.venue_routes import approval_status
+        detail["approval"] = approval_status(data.state_dir(code))
+    return jsonify(detail)
 
 
 @dashboard_bp.route("/api/state/<code>/run", methods=["POST"])

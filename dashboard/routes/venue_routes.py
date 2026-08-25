@@ -223,6 +223,35 @@ def _ai_flag_for(cache, gid):
     return cache.get("ai_flags", {}).get(_group_membership(cache, gid))
 
 
+def approval_status(working_dir: str) -> dict:
+    """Whether the approved snapshot is current with the draft.
+
+    Approve writes a point-in-time copy of the draft. Any venue-review edit
+    afterwards touches only the draft, leaving the snapshot stale — and
+    assign_ids.py --commit reads the snapshot, so committing then would silently
+    discard those edits. Callers surface this so the user knows to re-approve.
+    """
+    draft = os.path.join(working_dir, "venue_assignments_draft.csv")
+    approved = os.path.join(working_dir, "venue_assignments_approved.csv")
+    if not os.path.exists(approved):
+        return {"approved": False, "stale": False, "approved_at": None,
+                "approved_venues": None, "draft_venues": None}
+    approved_mtime = os.path.getmtime(approved)
+    stale = os.path.exists(draft) and os.path.getmtime(draft) > approved_mtime
+    out = {
+        "approved": True, "stale": stale,
+        "approved_at": datetime.fromtimestamp(approved_mtime).isoformat(),
+        "approved_venues": None, "draft_venues": None,
+    }
+    if stale:
+        try:
+            out["approved_venues"] = int(pd.read_csv(approved)["venue_id"].nunique())
+            out["draft_venues"] = int(pd.read_csv(draft)["venue_id"].nunique())
+        except Exception:
+            pass
+    return out
+
+
 def _has_duplicate_years(cache, gid):
     years = [m["year"] for m in cache["groups"].get(gid, []) if m["year"]]
     return len(years) != len(set(years))
@@ -320,7 +349,8 @@ def api_records(code):
                 "year": rec["year"], "description": rec["description"],
                 "reviewed": reviewed, "ai_flag": bool(ai and ai.get("needs_review")),
             })
-    return jsonify({"records": rows, "total_groups": len(meta), "total_records": len(rows)})
+    return jsonify({"records": rows, "total_groups": len(meta), "total_records": len(rows),
+                    "approval": approval_status(cache["working_dir"])})
 
 
 @venue_bp.route("/api/state/<code>/venues/summary")
@@ -350,6 +380,7 @@ def api_summary(code):
         "reviewed": n_reviewed, "splits": splits, "merges": merges, "reassigns": reassigns,
         "deletes": deletes, "total_edits": splits + merges + reassigns,
         "ai_flagged": n_ai_flagged, "has_ai_review": has_ai_review,
+        "approval": approval_status(cache["working_dir"]),
     })
 
 

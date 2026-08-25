@@ -31,7 +31,13 @@
     </div>
     <span id="filter-count" class="text-xs text-on-surface-variant"></span>
     <div class="flex-1"></div>
-    <p class="text-xs text-on-surface-variant">Each color = one venue group. Sort by Title or Address to bring duplicates together, then select groups to merge.</p>
+    <p class="text-xs text-on-surface-variant max-w-md">Each color = one venue group. Sort by Title or Address to bring duplicates together, then select groups to merge.</p>
+    <button id="approve-btn" class="bg-primary text-white px-4 py-1.5 rounded text-sm font-semibold shrink-0">Approve All Groups</button>
+</div>
+
+<div id="stale-warning" class="hidden px-8 py-2 bg-error-container text-on-error-container border-b border-outline-variant text-xs shrink-0">
+    <span class="font-bold inline-flex items-center gap-1"><span class="material-symbols-outlined text-sm">warning</span> Unapproved edits —</span>
+    <span id="stale-detail"></span>
 </div>
 
 <!-- Selection action bar -->
@@ -65,13 +71,25 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/approval.js') }}"></script>
 <script>
 const STATE = "{{ state }}";
 let allRecords = [];
 let sortKey = "title";
 let sortDir = 1;            // 1 asc, -1 desc
 let searchTerm = "";
+let totalGroupCount = 0;
 const selectedGroups = new Set();
+
+document.getElementById("approve-btn").addEventListener("click", () => {
+    if (!confirm(`Approve all ${totalGroupCount} venue groups for ${STATE}? This snapshots the current groups so they can be committed to the database.`)) return;
+    fetch(`/api/state/${STATE}/venues/approve`, { method: "POST" })
+        .then((r) => r.json())
+        .then((res) => {
+            alert(res.message + ` (${res.edits_made} edits made this session)`);
+            loadRecords(true);  // refreshes the unapproved-edits warning
+        });
+});
 
 function groupColor(idx, kind) {
     const hue = (idx * 47) % 360;
@@ -83,8 +101,10 @@ function loadRecords(preserveSelection) {
         .then((r) => r.json())
         .then((data) => {
             allRecords = data.records;
+            totalGroupCount = data.total_groups;
             document.getElementById("summary-line").textContent =
                 `${data.total_records} records · ${data.total_groups} groups`;
+            renderApprovalWarning(data.approval, "stale-warning", "stale-detail");
             if (!preserveSelection) selectedGroups.clear();
             render();
             updateActionBar();

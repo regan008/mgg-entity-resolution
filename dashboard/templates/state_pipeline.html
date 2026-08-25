@@ -106,6 +106,22 @@ function loadDetail(stageKey) {
                 metricsEl.appendChild(div);
             }
 
+            // Commit reads venue_assignments_approved.csv. If venue review has
+            // been edited since the last approval, that snapshot is stale and
+            // assign_ids.py will refuse — warn before they click Commit.
+            const stale = data.approval && data.approval.stale;
+            if (stale) {
+                const warn = document.createElement("div");
+                warn.className = "col-span-3 bg-error-container text-on-error-container rounded p-3";
+                const counts = (data.approval.approved_venues != null)
+                    ? ` Approved snapshot has ${data.approval.approved_venues} venues; current draft has ${data.approval.draft_venues}.`
+                    : "";
+                warn.innerHTML = `<div class="font-bold flex items-center gap-1"><span class="material-symbols-outlined text-base">warning</span> Unapproved edits — commit is blocked</div>
+                    <div class="text-sm mt-1">Venue groups were edited after the last approval.${counts}
+                    Re-approve in <a class="underline font-semibold" href="/state/${STATE}/venues">Venue Review</a> before committing, or the database would get the older snapshot.</div>`;
+                metricsEl.appendChild(warn);
+            }
+
             const actionsEl = document.getElementById("detail-actions");
             actionsEl.innerHTML = "";
             const cfg = STAGE_SCRIPTS[stageKey];
@@ -120,6 +136,11 @@ function loadDetail(stageKey) {
                     const btn = document.createElement("button");
                     btn.className = (cfg.danger ? "bg-error" : "bg-primary") + " text-white px-4 py-2 rounded text-sm font-semibold";
                     btn.textContent = cfg.label;
+                    if (stageKey === "commit" && stale) {
+                        btn.disabled = true;
+                        btn.className += " opacity-40 cursor-not-allowed";
+                        btn.title = "Re-approve in Venue Review first — the approved snapshot is out of date.";
+                    }
                     btn.onclick = () => {
                         if (cfg.danger && !confirm("This commits venue IDs to the database. Continue?")) return;
                         document.getElementById("log-panel").innerHTML = "";

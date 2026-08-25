@@ -54,6 +54,10 @@
             <button id="next-page" class="px-3 py-1 rounded bg-surface-container-high border border-outline-variant font-semibold disabled:opacity-40">Next</button>
         </div>
         <div class="p-3 border-t border-outline-variant shrink-0">
+            <div id="stale-warning" class="hidden mb-2 bg-error-container text-on-error-container rounded p-2 text-xs">
+                <div class="font-bold flex items-center gap-1"><span class="material-symbols-outlined text-sm">warning</span> Unapproved edits</div>
+                <div id="stale-detail" class="mt-1"></div>
+            </div>
             <button id="approve-btn" class="w-full bg-primary text-white px-4 py-2 rounded text-sm font-semibold">Approve All Groups for {{ state }}</button>
             <p class="text-xs text-on-surface-variant mt-2">Approves every group currently in the list above — not just the one you're viewing. Split/merge/reassign edits and review confirmations are logged to <span class="font-data-mono">venue_edit_log.csv</span>.</p>
         </div>
@@ -68,6 +72,7 @@
 
 {% block extra_scripts %}
 <script src="{{ url_for('static', filename='js/jobs.js') }}"></script>
+<script src="{{ url_for('static', filename='js/approval.js') }}"></script>
 <script>
 const STATE = "{{ state }}";
 const PER_PAGE = 50;
@@ -84,7 +89,10 @@ document.getElementById("approve-btn").addEventListener("click", () => {
     if (!confirm(`Approve all ${totalGroupCount} venue groups for ${STATE}? This prepares the entire state for commit — not just the group you're viewing.`)) return;
     fetch(`/api/state/${STATE}/venues/approve`, { method: "POST" })
         .then((r) => r.json())
-        .then((res) => alert(res.message + ` (${res.edits_made} edits made this session)`));
+        .then((res) => {
+            alert(res.message + ` (${res.edits_made} edits made this session)`);
+            loadSummary();  // clears the unapproved-edits warning
+        });
 });
 
 function loadSummary() {
@@ -104,6 +112,7 @@ function loadSummary() {
             if (statusEl && s.has_ai_review && !statusEl.dataset.running) {
                 statusEl.textContent = `${s.ai_flagged} of ${s.total_groups} groups flagged for review.`;
             }
+            renderApprovalWarning(s.approval, "stale-warning", "stale-detail");
         });
 }
 

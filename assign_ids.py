@@ -123,6 +123,29 @@ def commit_to_sqlite(state: str):
 
     # Use approved file if it exists, otherwise use draft
     if os.path.exists(approved_path):
+        # The approved file is a point-in-time snapshot taken when you clicked
+        # Approve. Edits made in venue review afterwards land in the draft only,
+        # so committing the snapshot would silently discard them. Refuse rather
+        # than write stale data — re-approve to refresh the snapshot.
+        if os.path.exists(draft_path) and os.path.getmtime(draft_path) > os.path.getmtime(approved_path):
+            approved_mtime = datetime.fromtimestamp(os.path.getmtime(approved_path))
+            draft_mtime = datetime.fromtimestamp(os.path.getmtime(draft_path))
+            try:
+                n_approved = pd.read_csv(approved_path)["venue_id"].nunique()
+                n_draft = pd.read_csv(draft_path)["venue_id"].nunique()
+                counts = (f"\n  Approved snapshot: {n_approved} venues"
+                          f"\n  Current draft:     {n_draft} venues")
+            except Exception:
+                counts = ""
+            raise RuntimeError(
+                f"Refusing to commit: {state} has unapproved edits.\n\n"
+                f"  Approved: {approved_mtime:%Y-%m-%d %H:%M:%S}\n"
+                f"  Draft:    {draft_mtime:%Y-%m-%d %H:%M:%S}  (newer)"
+                f"{counts}\n\n"
+                f"Venue review edits since your last approval are not in the approved "
+                f"snapshot, and committing it would discard them. Re-approve {state} in "
+                f"venue review (Approve All Groups), then commit again."
+            )
         source_path = approved_path
         print(f"Using approved assignments from {approved_path}")
     elif os.path.exists(draft_path):
@@ -243,6 +266,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.commit:
-        commit_to_sqlite(args.state)
+        # Guard failures (stale approval, missing ids) are user-actionable, not
+        # crashes — print the message plainly instead of a traceback.
+        try:
+            commit_to_sqlite(args.state)
+        except RuntimeError as e:
+            print(f"\nERROR: {e}", file=sys.stderr)
+            sys.exit(1)
     else:
         assign_ids(args.state)
