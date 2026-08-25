@@ -285,6 +285,44 @@ def venue_page(code):
     return render_template("venue_review.html", active_nav="pipeline_view", active_state=code, state=code)
 
 
+@venue_bp.route("/state/<code>/venues/table")
+def venue_table_page(code):
+    code = code.upper()
+    return render_template("venue_table.html", active_nav="pipeline_view", active_state=code, state=code)
+
+
+@venue_bp.route("/api/state/<code>/venues/records")
+def api_records(code):
+    """Flat, one-row-per-record view of every draft record, tagged with its group.
+    Powers the spreadsheet/table view: sort by title or address across all groups
+    to bring near-duplicate venues together, with each group color-blocked so you
+    can see which rows belong to the same (or a different) group at a glance."""
+    cache = _load_state(code.upper())
+    meta, groups = cache["meta"], cache["groups"]
+    reviewed_sets = _reviewed_memberships(cache)
+
+    # Stable color index per group: order by venue_id so a group keeps its color
+    # across reloads and sorts.
+    ordered_gids = sorted(meta.keys(), key=lambda g: meta[g]["venue_id"])
+    color_idx = {gid: i for i, gid in enumerate(ordered_gids)}
+
+    rows = []
+    for gid in ordered_gids:
+        m = meta[gid]
+        reviewed = _group_membership(cache, gid) in reviewed_sets
+        ai = _ai_flag_for(cache, gid)
+        for rec in groups[gid]:
+            rows.append({
+                "location_id": rec["id"], "group_id": gid, "venue_id": m["venue_id"],
+                "group_size": m["group_size"], "color_idx": color_idx[gid],
+                "title": rec["title"], "is_na_title": rec["is_na_title"],
+                "street_address": rec["street_address"], "city": rec["city"],
+                "year": rec["year"], "description": rec["description"],
+                "reviewed": reviewed, "ai_flag": bool(ai and ai.get("needs_review")),
+            })
+    return jsonify({"records": rows, "total_groups": len(meta), "total_records": len(rows)})
+
+
 @venue_bp.route("/api/state/<code>/venues/summary")
 def api_summary(code):
     cache = _load_state(code.upper())

@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block title %}Venue Table: {{ state }} | MGG Entity Resolution{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<style>
+    .vt-row.sel { outline: 2px solid var(--tw-primary, #000a1e); outline-offset: -2px; }
+    th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+    th.sortable:hover { background: #ece8de; }
+    .sort-arrow { font-size: 11px; opacity: 0.7; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="h-screen flex flex-col overflow-hidden">
+<header class="bg-surface/95 border-b border-outline-variant px-8 py-4 flex items-center justify-between shrink-0">
+    <div>
+        <a href="{{ url_for('dashboard.state_pipeline', code=state) }}" class="font-label-caps text-on-surface-variant hover:text-primary">&larr; Exit to Pipeline</a>
+        <h1 class="font-display text-xl font-bold">{{ state }}: Venue Table</h1>
+    </div>
+    <div class="flex items-center gap-4">
+        <a href="{{ url_for('venue.venue_page', code=state) }}" class="flex items-center gap-1 text-sm font-semibold text-primary border border-outline-variant hover:bg-surface-container px-3 py-1.5 rounded">
+            <span class="material-symbols-outlined text-base">view_agenda</span> Card View
+        </a>
+        <div class="font-data-mono text-sm" id="summary-line"></div>
+    </div>
+</header>
+
+<div class="px-8 py-3 border-b border-outline-variant flex items-center gap-4 shrink-0 bg-surface-container-low">
+    <div class="relative">
+        <span class="material-symbols-outlined absolute left-2 top-1.5 text-base text-on-surface-variant">search</span>
+        <input id="search" type="text" placeholder="Filter by title, address, city…" class="pl-8 pr-3 py-1.5 text-sm border border-outline-variant rounded w-80 bg-surface-container-lowest">
+    </div>
+    <span id="filter-count" class="text-xs text-on-surface-variant"></span>
+    <div class="flex-1"></div>
+    <p class="text-xs text-on-surface-variant">Each color = one venue group. Sort by Title or Address to bring duplicates together, then select groups to merge.</p>
+</div>
+
+<!-- Selection action bar -->
+<div id="action-bar" class="hidden px-8 py-2 border-b border-outline-variant bg-primary-container text-white flex items-center gap-3 shrink-0">
+    <span id="sel-count" class="text-sm font-semibold"></span>
+    <button id="merge-sel" class="bg-white text-primary px-3 py-1 rounded text-xs font-semibold">Merge Groups</button>
+    <button id="review-sel" class="bg-white/20 border border-white/40 px-3 py-1 rounded text-xs font-semibold">Mark Reviewed</button>
+    <button id="delete-sel" class="bg-error text-white px-3 py-1 rounded text-xs font-semibold">Delete Group(s)</button>
+    <div class="flex-1"></div>
+    <button id="clear-sel" class="text-xs underline">Clear selection</button>
+</div>
+
+<div class="flex-1 overflow-auto">
+    <table class="w-full border-collapse text-sm">
+        <thead class="sticky top-0 z-10 bg-surface-container-high font-label-caps text-on-surface-variant text-xs">
+            <tr>
+                <th class="px-2 py-2 text-left w-8"></th>
+                <th class="px-3 py-2 text-left sortable" data-key="venue_id">Venue ID <span class="sort-arrow" data-for="venue_id"></span></th>
+                <th class="px-3 py-2 text-left sortable" data-key="title">Title <span class="sort-arrow" data-for="title"></span></th>
+                <th class="px-3 py-2 text-left sortable" data-key="street_address">Street Address <span class="sort-arrow" data-for="street_address"></span></th>
+                <th class="px-3 py-2 text-left sortable" data-key="city">City <span class="sort-arrow" data-for="city"></span></th>
+                <th class="px-3 py-2 text-left sortable" data-key="year">Year <span class="sort-arrow" data-for="year"></span></th>
+                <th class="px-3 py-2 text-left sortable" data-key="group_size">Size <span class="sort-arrow" data-for="group_size"></span></th>
+                <th class="px-3 py-2 text-left">Status</th>
+            </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+    </table>
+</div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const STATE = "{{ state }}";
+let allRecords = [];
+let sortKey = "title";
+let sortDir = 1;            // 1 asc, -1 desc
+let searchTerm = "";
+const selectedGroups = new Set();
+
+function groupColor(idx, kind) {
+    const hue = (idx * 47) % 360;
+    return kind === "bg" ? `hsl(${hue}, 60%, 93%)` : `hsl(${hue}, 55%, 62%)`;
+}
+
+function loadRecords(preserveSelection) {
+    return fetch(`/api/state/${STATE}/venues/records`)
+        .then((r) => r.json())
+        .then((data) => {
+            allRecords = data.records;
+            document.getElementById("summary-line").textContent =
+                `${data.total_records} records · ${data.total_groups} groups`;
+            if (!preserveSelection) selectedGroups.clear();
+            render();
+            updateActionBar();
+        });
+}
+
+function sortedFilteredRecords() {
+    let rows = allRecords;
+    if (searchTerm) {
+        const t = searchTerm.toLowerCase();
+        rows = rows.filter((r) =>
+            (r.title || "").toLowerCase().includes(t) ||
+            (r.street_address || "").toLowerCase().includes(t) ||
+            (r.city || "").toLowerCase().includes(t) ||
+            (r.venue_id || "").toLowerCase().includes(t) ||
+            (r.description || "").toLowerCase().includes(t));
+    }
+    const key = sortKey;
+    rows = rows.slice().sort((a, b) => {
+        let va = a[key], vb = b[key];
+        if (key === "year" || key === "group_size") {
+            va = va == null ? -Infinity : va; vb = vb == null ? -Infinity : vb;
+            return (va - vb) * sortDir;
+        }
+        va = (va || "").toString().toLowerCase();
+        vb = (vb || "").toString().toLowerCase();
+        if (va < vb) return -1 * sortDir;
+        if (va > vb) return 1 * sortDir;
+        // tie-break: keep same-group rows adjacent
+        return (a.venue_id || "").localeCompare(b.venue_id || "");
+    });
+    return rows;
+}
+
+function render() {
+    const rows = sortedFilteredRecords();
+    document.getElementById("filter-count").textContent =
+        searchTerm ? `${rows.length} of ${allRecords.length} records shown` : "";
+
+    const tbody = document.getElementById("tbody");
+    tbody.innerHTML = rows.map((r) => {
+        const sel = selectedGroups.has(r.group_id);
+        const bg = groupColor(r.color_idx, "bg");
+        const bar = groupColor(r.color_idx, "border");
+        const title = r.is_na_title ? `<span class="italic text-on-surface-variant">[NA] ${(r.description || "").slice(0, 40)}</span>` : (r.title || "");
+        const status = [
+            r.reviewed ? '<span class="material-symbols-outlined text-xs text-green-600" title="Reviewed">check_circle</span>' : '',
+            r.ai_flag ? '<span class="material-symbols-outlined text-xs text-secondary" title="AI flagged">smart_toy</span>' : '',
+        ].join(" ");
+        return `<tr class="vt-row border-b border-outline-variant/40 ${sel ? 'sel' : ''}" data-gid="${r.group_id}"
+                    style="background:${bg}; box-shadow: inset 4px 0 0 ${bar};">
+            <td class="px-2 py-1.5"><input type="checkbox" class="row-check" data-gid="${r.group_id}" ${sel ? 'checked' : ''}></td>
+            <td class="px-3 py-1.5 font-data-mono text-xs">${r.venue_id}</td>
+            <td class="px-3 py-1.5">${title}</td>
+            <td class="px-3 py-1.5">${r.street_address || ''}</td>
+            <td class="px-3 py-1.5">${r.city || ''}</td>
+            <td class="px-3 py-1.5 font-data-mono">${r.year || '—'}</td>
+            <td class="px-3 py-1.5 font-data-mono">${r.group_size}</td>
+            <td class="px-3 py-1.5">${status}</td>
+        </tr>`;
+    }).join("");
+
+    // sort arrows
+    document.querySelectorAll(".sort-arrow").forEach((el) => {
+        el.textContent = el.dataset.for === sortKey ? (sortDir === 1 ? "▲" : "▼") : "";
+    });
+}
+
+function toggleGroup(gid) {
+    if (selectedGroups.has(gid)) selectedGroups.delete(gid); else selectedGroups.add(gid);
+    // update just the affected rows' checked state + ring without full re-render
+    document.querySelectorAll(`.vt-row[data-gid="${gid}"]`).forEach((tr) => {
+        tr.classList.toggle("sel", selectedGroups.has(gid));
+        const cb = tr.querySelector(".row-check");
+        if (cb) cb.checked = selectedGroups.has(gid);
+    });
+    updateActionBar();
+}
+
+function updateActionBar() {
+    const bar = document.getElementById("action-bar");
+    const n = selectedGroups.size;
+    bar.classList.toggle("hidden", n === 0);
+    const recs = allRecords.filter((r) => selectedGroups.has(r.group_id)).length;
+    document.getElementById("sel-count").textContent = `${n} group${n === 1 ? '' : 's'} selected (${recs} records)`;
+    document.getElementById("merge-sel").disabled = n < 2;
+    document.getElementById("merge-sel").classList.toggle("opacity-40", n < 2);
+}
+
+// Event delegation for row / checkbox clicks
+document.getElementById("tbody").addEventListener("click", (e) => {
+    const tr = e.target.closest(".vt-row");
+    if (!tr) return;
+    const gid = parseInt(tr.dataset.gid);
+    // clicking the checkbox and clicking the row both toggle the whole group
+    if (e.target.classList.contains("row-check")) { toggleGroup(gid); return; }
+    toggleGroup(gid);
+});
+
+// Column header sorting
+document.querySelectorAll("th.sortable").forEach((th) => {
+    th.addEventListener("click", () => {
+        const key = th.dataset.key;
+        if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; }
+        render();
+    });
+});
+
+// Search
+document.getElementById("search").addEventListener("input", (e) => {
+    searchTerm = e.target.value.trim();
+    render();
+});
+
+document.getElementById("clear-sel").addEventListener("click", () => {
+    selectedGroups.clear();
+    document.querySelectorAll(".vt-row.sel").forEach((tr) => {
+        tr.classList.remove("sel");
+        const cb = tr.querySelector(".row-check"); if (cb) cb.checked = false;
+    });
+    updateActionBar();
+});
+
+// --- Actions ---
+document.getElementById("merge-sel").addEventListener("click", () => {
+    const gids = Array.from(selectedGroups);
+    if (gids.length < 2) return;
+    const vids = allRecords.filter((r) => selectedGroups.has(r.group_id))
+        .reduce((acc, r) => { acc[r.group_id] = r.venue_id; return acc; }, {});
+    if (!confirm(`Merge these ${gids.length} groups into one venue?\n\n${Object.values(vids).join(", ")}`)) return;
+    const notes = prompt("Optional note for this merge (why are these the same venue?):", "") || "";
+    fetch(`/api/state/${STATE}/venues/merge`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ group_ids: gids, notes }),
+    }).then((r) => r.json()).then((res) => {
+        if (res.error) { alert(res.error); return; }
+        loadRecords(false);
+    });
+});
+
+document.getElementById("review-sel").addEventListener("click", async () => {
+    const gids = Array.from(selectedGroups);
+    if (!gids.length) return;
+    for (const gid of gids) {
+        await fetch(`/api/state/${STATE}/venues/review`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ group_id: gid }),
+        });
+    }
+    loadRecords(false);
+});
+
+document.getElementById("delete-sel").addEventListener("click", async () => {
+    const gids = Array.from(selectedGroups);
+    if (!gids.length) return;
+    const recs = allRecords.filter((r) => selectedGroups.has(r.group_id)).length;
+    if (!confirm(`Delete ${gids.length} whole group(s) and all ${recs} of their records?\n\nUse this for groups that don't belong (e.g. cruising areas). The records drop out of the draft entirely. Logged to venue_edit_log.csv.`)) return;
+    const notes = prompt("Optional reason for deleting:", "") || "";
+    for (const gid of gids) {
+        await fetch(`/api/state/${STATE}/venues/delete`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ group_id: gid, notes }),
+        });
+    }
+    loadRecords(false);
+});
+
+loadRecords(false);
+</script>
+{% endblock %}
