@@ -4,6 +4,48 @@ A chronological record of key decisions made during pipeline development.
 
 ---
 
+### 2026-08-25 — Wyoming committed: first state completed under the rebuilt pipeline
+
+**Milestone**: WY ran end to end and was committed to `mgg.db` — **253 brick-and-mortar records → 57 unique venues** (48 multi-record venues, largest spanning 13 editions; 9 singletons).
+
+**Why it matters**: This is the first state resolved under the post-rebuild pipeline (brick-and-mortar scope + Gemini adjudication + AI group review + dashboard review). It supersedes the April prototype result for WY (358 records → 69 venues), which included cruising areas and used Claude Haiku.
+
+**Human effort**: Of 1,239 candidate pairs, only 12 needed human adjudication. AI group review flagged 4 of 54 multi-record groups. Venue review produced 9 grouping edits (1 split, 4 merges, 4 reassigns) plus 6 group deletions — the deletions being cruising-area venues that reached the draft because they lacked the `amenity_id=90` tag in the source data.
+
+**Cost**: the entire state — adjudication plus group review — cost well under one cent.
+
+**Known limitation surfaced**: cruising-area exclusion is only as good as the source tagging. Untagged cruising locations pass the `preprocess.py` filter and must be caught by hand in venue review. Deleting them there removes them from the draft but not from the source, so re-running `assign_ids.py` would reintroduce them. A durable fix (persisting exclusions, or a secondary heuristic) is still open.
+
+---
+
+### 2026-08-25 — Commit refuses a stale approved snapshot
+
+**Problem found in practice**: WY was committed with the wrong data. Approve had been clicked at 08:36 (60 venues); three merges followed at 08:52–08:54 (down to 57); Commit at 08:55 wrote **60**, silently discarding the merges. The venue review page showed 57 while the database held 60.
+
+**Cause**: `assign_ids.py --commit` prefers `venue_assignments_approved.csv` over the draft whenever that file exists. Approve writes a point-in-time snapshot, and nothing invalidated it when the draft was edited afterwards. The UI gave no indication that Commit would write older data.
+
+**Decision**: Make a stale commit impossible rather than merely unlikely. Staleness is determined by comparing mtimes of the draft and the approved snapshot — no new tracking file, and it applies automatically to every future state.
+
+**Implementation**:
+- `assign_ids.py:commit_to_sqlite()` — refuses when the draft is newer than the approved snapshot, reporting both timestamps and venue counts. `--commit` RuntimeErrors now print as a plain message and exit 1 rather than a traceback, since they are user-actionable.
+- `dashboard/routes/venue_routes.py:approval_status()` — reports `approved` / `stale` / venue counts; exposed on the venue summary and records endpoints and on the commit stage detail.
+- `dashboard/static/js/approval.js` — shared warning renderer used by both venue views.
+- Pipeline View's Commit stage shows the warning with exact counts and **disables** the Commit button while stale.
+
+**Verified**: the guard blocked the bad commit in the real flow; after re-approving, the database received the correct 57 venues, with every `location_id → venue_id` pair matching the draft exactly.
+
+---
+
+### 2026-08-25 — Spreadsheet table view for venue review
+
+**Decision**: Add a flat, sortable table view alongside the existing card view in venue group review. Each record is one row; each group is color-blocked with a stable hue and colored left edge.
+
+**Why**: The card view shows one group at a time, which makes cross-group duplicates nearly impossible to spot — several iterations of "Holiday Inn Bar" scattered across separate groups look fine individually. Sorting a flat table by title or street address brings near-identical names adjacent, while the colors reveal at a glance whether they belong to the same group or different ones (the cue to merge). This is the difference between review being feasible and infeasible on large states.
+
+**Implementation**: `GET /state/<code>/venues/table` + `GET /api/state/<code>/venues/records` (flat one-row-per-record list tagged with group id, venue id, stable color index, reviewed status, AI flag). Client-side column sorting and text filtering. Row selection operates on whole groups; merge, delete, and mark-reviewed reuse the existing endpoints, so edits log to `venue_edit_log.csv` identically to the card view.
+
+---
+
 ### 2026-06-29 — Brick-and-mortar scope: exclude cruising areas at source
 
 **Decision**: Drop cruising area records (amenity_id=90) in stage 1 (`preprocess.py`) instead of isolating them at blocking. Only brick-and-mortar venues enter the pipeline.
