@@ -19,11 +19,33 @@ import pandas as pd
 import config
 
 
+def load_excluded_records(working_dir: str) -> set:
+    """Location IDs permanently excluded by a reviewer (venue review's delete
+    action writes them to excluded_records.csv).
+
+    These are records that should never have entered the pipeline — most often
+    cruising areas missing the amenity_id=90 tag in the source, which therefore
+    survived the brick-and-mortar filter in preprocess.py. The file is
+    append-only and hand-editable: remove a row to bring a record back.
+    """
+    path = os.path.join(working_dir, "excluded_records.csv")
+    if not os.path.exists(path):
+        return set()
+    try:
+        df = pd.read_csv(path)
+    except pd.errors.EmptyDataError:
+        return set()
+    if "location_id" not in df.columns:
+        return set()
+    return set(int(x) for x in df["location_id"].dropna())
+
+
 def assign_ids(state: str):
     """Generate draft venue assignments from consolidated groups."""
     working_dir = os.path.join(config.WORKING_DIR, state)
     groups_path = os.path.join(working_dir, "consolidated_groups.csv")
     preprocessed_path = os.path.join(working_dir, "preprocessed.csv")
+
 
     if not os.path.exists(groups_path):
         print(f"No consolidated groups found. Run consolidate.py first.")
@@ -32,6 +54,22 @@ def assign_ids(state: str):
     groups_df = pd.read_csv(groups_path)
     records_df = pd.read_csv(preprocessed_path)
     records = records_df.set_index("id")
+
+    # Honor records excluded by hand in venue review (e.g. cruising areas that
+    # lacked amenity_id=90 in the source and so passed the preprocess filter).
+    # Without this, rebuilding the draft here would silently reintroduce every
+    # record the reviewer deleted.
+    excluded = load_excluded_records(working_dir)
+    if excluded:
+        before = len(groups_df)
+        groups_before = groups_df["group_id"].nunique()
+        groups_df = groups_df[~groups_df["record_id"].astype(int).isin(excluded)].copy()
+        removed = before - len(groups_df)
+        # Dropping members changes group sizes, and a group can vanish entirely.
+        groups_df["group_size"] = groups_df.groupby("group_id")["record_id"].transform("size")
+        print(f"Excluded {removed} record(s) listed in excluded_records.csv "
+              f"({len(excluded)} on file); "
+              f"{groups_before - groups_df['group_id'].nunique()} group(s) removed entirely")
 
     # Assign venue IDs
     rows = []

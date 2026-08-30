@@ -555,32 +555,107 @@ def api_reassign(code):
     return jsonify({"status": "reassigned", "record_id": record_id})
 
 
+def _delete_groups(cache, gids: list[int], notes: str) -> list[dict]:
+    """Remove whole groups from the draft and record their records as permanently
+    excluded. Returns one summary dict per deleted group.
+
+    Deleting only rewrites the draft, so without the exclusions file a later
+    `assign_ids.py {STATE}` — which rebuilds the draft from consolidated_groups.csv
+    — would silently reintroduce every deleted record. Appending them to
+    excluded_records.csv (which assign_ids.py honors) makes the decision durable.
+    """
+    deleted = []
+    for gid in gids:
+        members = cache["groups"][gid]
+        info = {
+            "group_id": gid, "venue_id": cache["meta"][gid]["venue_id"],
+            "member_ids": [m["id"] for m in members], "group_size": len(members),
+            "members": members,
+        }
+        del cache["groups"][gid]
+        del cache["meta"][gid]
+        deleted.append(info)
+
+    # One draft write for the whole batch; deleted venue IDs retire (leave gaps).
+    _save_draft(cache)
+    _record_exclusions(cache, deleted, notes)
+    for info in deleted:
+        _log_edit(cache, "delete", {
+            "group_id": info["group_id"], "venue_id": info["venue_id"],
+            "member_ids": info["member_ids"], "group_size": info["group_size"],
+            "notes": notes,
+        })
+    return deleted
+
+
+def _record_exclusions(cache, deleted: list[dict], notes: str):
+    """Append deleted records to working/{state}/excluded_records.csv (append-only,
+    deduped by location_id) so the exclusion survives re-running assign_ids.py."""
+    path = os.path.join(cache["working_dir"], "excluded_records.csv")
+    fieldnames = ["location_id", "venue_id", "title", "street_address", "city",
+                  "year", "reason", "excluded_at"]
+    existing = set()
+    if os.path.exists(path):
+        try:
+            existing = set(int(x) for x in pd.read_csv(path)["location_id"])
+        except (pd.errors.EmptyDataError, KeyError, ValueError):
+            existing = set()
+
+    now = datetime.now().isoformat()
+    new_rows = []
+    for info in deleted:
+        for m in info["members"]:
+            if m["id"] in existing:
+                continue
+            existing.add(m["id"])
+            new_rows.append({
+                "location_id": m["id"], "venue_id": info["venue_id"],
+                "title": m.get("title", ""), "street_address": m.get("street_address", ""),
+                "city": m.get("city", ""), "year": m.get("year"),
+                "reason": notes, "excluded_at": now,
+            })
+    if not new_rows:
+        return
+    write_header = not os.path.exists(path) or os.path.getsize(path) == 0
+    with open(path, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if write_header:
+            writer.writeheader()
+        writer.writerows(new_rows)
+
+
 @venue_bp.route("/api/state/<code>/venues/delete", methods=["POST"])
 def api_delete(code):
-    """Delete a whole group and all its records from the draft assignments —
-    e.g. a cruising-area venue that slipped past the brick-and-mortar filter.
-    The records simply drop out of the draft and will not be assigned a venue
-    ID on commit. Logged to venue_edit_log.csv as a 'delete' action."""
+    """Delete one or more whole groups from the draft — e.g. cruising-area venues
+    that slipped past the brick-and-mortar filter because they lack amenity_id=90
+    in the source. Accepts either `group_id` (single) or `group_ids` (bulk).
+
+    The records drop out of the draft (so they get no venue ID on commit) and are
+    appended to excluded_records.csv so re-running assign_ids.py won't bring them
+    back. Each group is logged separately to venue_edit_log.csv."""
     cache = _load_state(code.upper())
-    data = request.json
-    gid = int(data["group_id"])
+    data = request.json or {}
+    if "group_ids" in data:
+        gids = [int(g) for g in data["group_ids"]]
+    elif "group_id" in data:
+        gids = [int(data["group_id"])]
+    else:
+        return jsonify({"error": "Provide group_id or group_ids"}), 400
     notes = data.get("notes", "")
-    if gid not in cache["groups"]:
-        return jsonify({"error": "Group not found"}), 404
 
-    members = cache["groups"][gid]
-    member_ids = [m["id"] for m in members]
-    venue_id = cache["meta"][gid]["venue_id"]
-    group_size = len(members)
+    if not gids:
+        return jsonify({"error": "No groups selected"}), 400
+    missing = [g for g in gids if g not in cache["groups"]]
+    if missing:
+        return jsonify({"error": f"Group(s) not found: {missing}"}), 404
 
-    del cache["groups"][gid]
-    del cache["meta"][gid]
-    _save_draft(cache)  # remaining groups keep their venue IDs; this one's ID retires (gap)
-    _log_edit(cache, "delete", {
-        "group_id": gid, "venue_id": venue_id, "member_ids": member_ids,
-        "group_size": group_size, "notes": notes,
+    deleted = _delete_groups(cache, gids, notes)
+    return jsonify({
+        "status": "deleted",
+        "groups_removed": len(deleted),
+        "records_removed": sum(d["group_size"] for d in deleted),
+        "venue_ids": [d["venue_id"] for d in deleted],
     })
-    return jsonify({"status": "deleted", "venue_id": venue_id, "records_removed": group_size})
 
 
 @venue_bp.route("/api/state/<code>/venues/review", methods=["POST"])

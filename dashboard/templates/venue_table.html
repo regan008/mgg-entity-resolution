@@ -257,19 +257,20 @@ document.getElementById("review-sel").addEventListener("click", async () => {
     loadRecords(false);
 });
 
-document.getElementById("delete-sel").addEventListener("click", async () => {
+document.getElementById("delete-sel").addEventListener("click", () => {
     const gids = Array.from(selectedGroups);
     if (!gids.length) return;
     const recs = allRecords.filter((r) => selectedGroups.has(r.group_id)).length;
-    if (!confirm(`Delete ${gids.length} whole group(s) and all ${recs} of their records?\n\nUse this for groups that don't belong (e.g. cruising areas). The records drop out of the draft entirely. Logged to venue_edit_log.csv.`)) return;
-    const notes = prompt("Optional reason for deleting:", "") || "";
-    for (const gid of gids) {
-        await fetch(`/api/state/${STATE}/venues/delete`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ group_id: gid, notes }),
-        });
-    }
-    loadRecords(false);
+    const vids = [...new Set(allRecords.filter((r) => selectedGroups.has(r.group_id)).map((r) => r.venue_id))];
+    if (!confirm(`Delete ${gids.length} group(s) and all ${recs} of their records?\n\n${vids.join(", ")}\n\nUse this for groups that don't belong (e.g. cruising areas). The records are permanently excluded — they won't come back if you re-run Assign IDs.`)) return;
+    const notes = prompt("Reason for deleting (e.g. 'cruisy'):", "cruisy") || "";
+    fetch(`/api/state/${STATE}/venues/delete`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ group_ids: gids, notes }),
+    }).then((r) => r.json()).then((res) => {
+        if (res.error) { alert(res.error); return; }
+        loadRecords(false);
+    });
 });
 
 loadRecords(false);

@@ -43,9 +43,12 @@
             <div id="ai-review-status" class="text-xs text-on-surface-variant mt-1"></div>
             <pre id="ai-log" class="hidden mt-2 max-h-32 overflow-y-auto text-[10px] font-data-mono bg-surface-container-highest rounded p-2"></pre>
         </div>
-        <div id="merge-bar" class="hidden p-2 border-b border-outline-variant bg-secondary-container/10 flex items-center justify-between shrink-0">
-            <span class="text-xs font-data-mono" id="merge-count">0 selected</span>
-            <button id="merge-btn" class="bg-secondary text-white px-3 py-1 rounded text-xs font-semibold">Merge Selected</button>
+        <div id="merge-bar" class="hidden p-2 border-b border-outline-variant bg-secondary-container/10 flex items-center justify-between gap-2 shrink-0">
+            <span class="text-xs font-data-mono shrink-0" id="merge-count">0 selected</span>
+            <div class="flex gap-1">
+                <button id="merge-btn" class="bg-secondary text-white px-3 py-1 rounded text-xs font-semibold">Merge</button>
+                <button id="delete-sel-btn" class="bg-error text-white px-3 py-1 rounded text-xs font-semibold">Delete</button>
+            </div>
         </div>
         <div class="flex-1 overflow-y-auto" id="group-list"></div>
         <div id="pagination-bar" class="hidden px-3 py-2 border-t border-outline-variant flex items-center justify-between text-xs shrink-0">
@@ -117,9 +120,15 @@ function loadSummary() {
 }
 
 function updateMergeBar() {
+    // Visible from 1 selection (delete works on one group); merge needs 2+.
     const bar = document.getElementById("merge-bar");
-    document.getElementById("merge-count").textContent = `${mergeSelected.size} selected`;
-    bar.classList.toggle("hidden", mergeSelected.size < 2);
+    const n = mergeSelected.size;
+    document.getElementById("merge-count").textContent = `${n} selected`;
+    bar.classList.toggle("hidden", n < 1);
+    const mergeBtn = document.getElementById("merge-btn");
+    mergeBtn.disabled = n < 2;
+    mergeBtn.classList.toggle("opacity-40", n < 2);
+    mergeBtn.title = n < 2 ? "Select 2 or more groups to merge" : "";
 }
 
 // Fetch the current page of groups from the server. `desiredSelection` controls
@@ -337,8 +346,8 @@ function renderDetail(g) {
     });
 
     document.getElementById("delete-btn").addEventListener("click", () => {
-        if (!confirm(`Delete venue group ${g.venue_id} and all ${g.group_size} of its records?\n\nUse this for groups that don't belong (e.g. a cruising area that wasn't filtered out). The records drop out of the draft entirely and won't be assigned a venue ID. This is logged to venue_edit_log.csv.`)) return;
-        const notes = prompt("Optional reason for deleting (e.g. 'cruising area, not brick-and-mortar'):", "") || "";
+        if (!confirm(`Delete venue group ${g.venue_id} and all ${g.group_size} of its records?\n\nUse this for groups that don't belong (e.g. a cruising area that wasn't filtered out). The records are permanently excluded — they get no venue ID, and won't come back if you re-run Assign IDs. Logged to venue_edit_log.csv and excluded_records.csv.`)) return;
+        const notes = prompt("Reason for deleting (e.g. 'cruisy'):", "cruisy") || "";
         fetch(`/api/state/${STATE}/venues/delete`, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ group_id: g.group_id, notes }),
@@ -425,6 +434,25 @@ document.getElementById("merge-btn").addEventListener("click", () => {
     if (!confirm(`Merge these ${ids.length} groups into one venue?${label}`)) return;
     const notes = prompt("Optional note for this merge (why are these the same venue?):", "") || "";
     fetch(`/api/state/${STATE}/venues/merge`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ group_ids: ids, notes }),
+    }).then((r) => r.json()).then((res) => {
+        if (res.error) { alert(res.error); return; }
+        mergeSelected.clear();
+        selectedGid = null;
+        loadSummary(); fetchGroups();
+    });
+});
+
+document.getElementById("delete-sel-btn").addEventListener("click", () => {
+    const ids = Array.from(mergeSelected);
+    if (!ids.length) { alert("Select one or more groups to delete."); return; }
+    const sel = ids.map((gid) => groupsCache.find((x) => x.group_id === gid)).filter(Boolean);
+    const recs = sel.reduce((n, g) => n + g.group_size, 0);
+    const label = sel.length ? `\n\n${sel.map((g) => g.venue_id).join(", ")}` : "";
+    if (!confirm(`Delete ${ids.length} group(s) and all ${recs} of their records?${label}\n\nUse this for groups that don't belong (e.g. cruising areas). The records are permanently excluded — they won't come back if you re-run Assign IDs.`)) return;
+    const notes = prompt("Reason for deleting (e.g. 'cruisy'):", "cruisy") || "";
+    fetch(`/api/state/${STATE}/venues/delete`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ group_ids: ids, notes }),
     }).then((r) => r.json()).then((res) => {
