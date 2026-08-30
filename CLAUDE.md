@@ -15,7 +15,13 @@ _Last updated 2026-08-25._
 - Stats logging (`pipeline_stats.py`) is integrated into every stage → `pipeline_stats.csv`.
 - Full reference in `PIPELINE_DOCUMENTATION.md`; decision record in `project_history.md`.
 
-**Known limitation**: cruising-area exclusion depends on `amenity_id=90` being set in the source. Untagged cruising locations pass the filter and must be deleted by hand in venue review — and deleting removes them from the draft only, so re-running `assign_ids.py` reintroduces them.
+**Cruising areas — two layers**:
+1. `preprocess.py` hard-drops everything tagged `amenity_id=90` at stage 1 (13–32% of records per state).
+2. Untagged cruising locations survive that filter and are deleted by hand in venue review. Measured leakage is **~5–8% of true cruising areas** (WY: 97 tagged + 8 by hand; SC: 368 + 20).
+
+Hand deletions are **durable**: they append to `working/{state}/excluded_records.csv`, which `assign_ids.py` honors when rebuilding the draft. That file is append-only and hand-editable — delete a row to bring a record back.
+
+**Remaining limitation**: only deletions persist across a re-run. Grouping edits (merge/split/reassign) are not replayed, so re-running `assign_ids.py` gives the correct record set with the *original* grouping.
 
 ## Pipeline Architecture
 
@@ -65,6 +71,7 @@ template/Python edits require a dashboard restart to take effect (debug is off).
 | `group_review.py` | Optional AI pass flagging questionable venue groups → `group_flags.csv` |
 | `dashboard/` | Flask control panel (port 5050): run stages, pair review, venue review, costs |
 | `working/{state}/venue_edit_log.csv` | Every human venue-review action (split/merge/reassign/delete/review/approve) |
+| `working/{state}/excluded_records.csv` | Records permanently excluded by a reviewer (mostly untagged cruising areas); honored by `assign_ids.py` |
 | `mgg.db` | SQLite database (do not commit to git — too large) |
 | `PIPELINE_DOCUMENTATION.md` | Full reference with function-level `file:line` links |
 | `working/{state}/` | Intermediate CSVs per state |
