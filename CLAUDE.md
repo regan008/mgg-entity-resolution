@@ -92,7 +92,9 @@ template/Python edits require a dashboard restart to take effect (debug is off).
 
 7. **Resume support**: `adjudicate.py --resume` picks up from interrupted API runs. Progress is saved after each batch of 20 pairs.
 
-8. **Cruising area isolation** (`is_cruising_area` flag, `amenity_id=90`): Cruising areas (outdoor spots, parks, rest areas) are blocked separately from named venues — they are only compared against other cruising areas or NA-title records. NA-title records are exempt from the filter because they often describe the same cruising location without a title in certain years. DE analysis: 2,179 mixed pairs dropped at blocking stage (2,008 were auto-rejects anyway; 127 legitimate NA-title↔cruising matches are preserved). The `is_cruising_area` column is added in `preprocess.py`; the filter runs in `block.py:block_state()`.
+8. **Cruising area exclusion** (`amenity_id=90`): Under the brick-and-mortar scope, cruising areas are **dropped outright** in `preprocess.py:194` — they never reach blocking, scoring, or adjudication. Records missing the tag in the source are caught by hand in venue review and recorded in `excluded_records.csv` (see *Cruising areas — two layers* above).
+
+   _Superseded_: through April 2026 cruising areas were kept in the pipeline and merely *isolated* at the blocking stage (`block.py:cruising_compatible()`), so they were only ever compared against other cruising areas or NA-title records. That function no longer exists; `block.py` just notes the exclusion happened upstream. The DE-era figures for that approach (2,179 mixed pairs dropped, 127 NA-title↔cruising matches preserved) describe the old design and are kept only as history.
 
 ## Database Schema (key tables)
 
