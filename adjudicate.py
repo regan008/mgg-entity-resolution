@@ -58,6 +58,50 @@ def _atomic_to_csv(df: pd.DataFrame, path: str):
     os.replace(tmp, path)
 
 
+def check_integrity(scored_df: pd.DataFrame, state_dir: str) -> list[str]:
+    """Check a finished adjudication for silent incompleteness.
+
+    Two failure modes have bitten this pipeline, both of which let the script
+    exit normally while producing plausible-looking but wrong output:
+
+      1. Truncation — an interrupted mid-write left adjudicated_pairs.csv with
+         fewer rows than scored_pairs.csv, silently dropping whole pairs.
+      2. Unresolved pairs — when the API is unreachable or out of quota, every
+         batch fails and its pairs are marked 'ai_no_response' (decision
+         "uncertain"). The run completes and writes its outputs, but those pairs
+         never got a decision and would be treated as non-matches downstream.
+
+    Returns a list of human-readable problems; empty means clean.
+    """
+    problems = []
+
+    scored_path = os.path.join(state_dir, "scored_pairs.csv")
+    if os.path.exists(scored_path):
+        expected = sum(1 for _ in open(scored_path)) - 1  # minus header
+        if len(scored_df) != expected:
+            problems.append(
+                f"Row count mismatch: {len(scored_df):,} adjudicated vs "
+                f"{expected:,} in scored_pairs.csv "
+                f"({expected - len(scored_df):+,} difference). "
+                f"adjudicated_pairs.csv may be truncated."
+            )
+
+    method = scored_df["method"].fillna("")
+    in_ai_range = (
+        (scored_df["composite_score"] >= config.AUTO_REJECT_THRESHOLD)
+        & (scored_df["composite_score"] < config.AUTO_MATCH_THRESHOLD)
+    )
+    unresolved = int((in_ai_range & method.isin(["ai_no_response", "pending", ""])).sum())
+    if unresolved:
+        problems.append(
+            f"{unresolved:,} AI-range pair(s) have no AI decision "
+            f"(method is ai_no_response/pending/blank). They are recorded as "
+            f"'uncertain' and would be treated as NON-MATCHES downstream, "
+            f"under-merging this state."
+        )
+    return problems
+
+
 def detect_edge_case(row: pd.Series, has_na_title: bool = False) -> str:
     """
     Detect edge cases that need manual review regardless of decision tier.
@@ -514,6 +558,19 @@ def adjudicate_state(state: str, skip_ai: bool = False,
         "human_review_total": int(scored_df["needs_human_review"].sum()),
     })
 
+    # Surface silent incompleteness loudly rather than exiting "successfully"
+    # with output that looks fine but is missing decisions.
+    problems = check_integrity(scored_df, state_dir)
+    if problems:
+        logger.error("=" * 70)
+        logger.error("ADJUDICATION INCOMPLETE — do not proceed to consolidate.py")
+        for p in problems:
+            logger.error(f"  - {p}")
+        logger.error(f"  Fix: python3 adjudicate.py {state} --resume")
+        logger.error("=" * 70)
+    else:
+        logger.info("Integrity check passed: all pairs present and adjudicated.")
+
     return scored_df
 
 
@@ -541,3 +598,16 @@ if __name__ == "__main__":
         print(f"\nHuman review needed: {human_review} pairs")
         print(result_df.loc[result_df["needs_human_review"],
                             "human_review_reason"].value_counts().to_string())
+
+    # Exit non-zero when the run finished but the data is incomplete, so the
+    # dashboard job (and any shell/CI caller) reports failure instead of success.
+    if not skip_ai:
+        problems = check_integrity(
+            result_df, os.path.join(config.WORKING_DIR, state)
+        )
+        if problems:
+            print(f"\nADJUDICATION INCOMPLETE for {state}:", file=sys.stderr)
+            for p in problems:
+                print(f"  - {p}", file=sys.stderr)
+            print(f"\n  Run: python3 adjudicate.py {state} --resume", file=sys.stderr)
+            sys.exit(1)
