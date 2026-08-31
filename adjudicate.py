@@ -308,11 +308,12 @@ def adjudicate_state(state: str, skip_ai: bool = False,
 
     # In resume mode, load the existing adjudicated file instead of starting fresh
     if resume and os.path.exists(output_path):
-        scored_df = pd.read_csv(output_path)
+        scored_df = pd.read_csv(output_path, low_memory=False)
         logger.info(f"Resuming: loaded {len(scored_df)} pairs from {output_path}")
-        already_done = (scored_df["method"] == "ai_adjudication").sum()
-        not_done = (scored_df["method"] == "ai_no_response").sum()
-        logger.info(f"  Already adjudicated: {already_done}, remaining: {not_done}")
+        _m = scored_df["method"].fillna("")  # empty CSV fields read back as NaN
+        already_done = int((_m == "ai_adjudication").sum())
+        not_done = int(_m.isin(["ai_no_response", "pending", ""]).sum())
+        logger.info(f"  Already adjudicated: {already_done}, unresolved: {not_done}")
     else:
         scored_df = pd.read_csv(scored_path)
 
@@ -332,11 +333,17 @@ def adjudicate_state(state: str, skip_ai: bool = False,
         scored_df["needs_human_review"] = False
         scored_df["human_review_reason"] = ""
     else:
-        # When resuming, ensure string columns have the right dtype
-        # (loading from CSV may infer them as float/numeric if they had NaN/empty values)
+        # When resuming, normalize string columns: an empty CSV field reads back
+        # as NaN, and the retry mask below matches on "" — so NaN must become ""
+        # or those pairs are invisible to --resume.
+        #
+        # fillna() must come BEFORE astype(str). Under pandas 3.x astype(str)
+        # preserves NaN as NaN rather than producing the string "nan" (a change
+        # from pandas 2.x), so the older `astype(str).replace("nan", "")` silently
+        # left every missing value as NaN and resume reported nothing to do.
         for col in ["decision", "method", "ai_rationale", "human_review_reason"]:
             if col in scored_df.columns:
-                scored_df[col] = scored_df[col].astype(str).replace("nan", "")
+                scored_df[col] = scored_df[col].fillna("").astype(str).replace("nan", "")
     # Pre-compute NA-title flag for each pair
     def _has_na_title(row):
         id_a, id_b = int(row["id_a"]), int(row["id_b"])
@@ -374,7 +381,11 @@ def adjudicate_state(state: str, skip_ai: bool = False,
 
     # In resume mode, only process pairs that failed (ai_no_response or uncertain method)
     if resume:
-        needs_retry_mask = ai_mask & scored_df["method"].isin(["ai_no_response", "pending", ""])
+        # fillna guards against NaN from an empty CSV field, which would
+        # otherwise never match "" and make unresolved pairs invisible.
+        needs_retry_mask = ai_mask & scored_df["method"].fillna("").isin(
+            ["ai_no_response", "pending", ""]
+        )
         ai_pairs = scored_df[needs_retry_mask]
         logger.info(
             f"State={state} (RESUME): {needs_retry_mask.sum()} pairs need AI adjudication "
@@ -392,9 +403,19 @@ def adjudicate_state(state: str, skip_ai: bool = False,
         if not skip_ai and ai_pairs.empty and resume:
             logger.info("All AI-range pairs already adjudicated — nothing to resume")
         elif not ai_pairs.empty:
-            scored_df.loc[ai_mask, "decision"] = "needs_ai"
-            scored_df.loc[ai_mask, "method"] = "pending"
-            logger.info("AI adjudication skipped — pairs marked as 'needs_ai'")
+            # Mark only pairs that have NO decision yet. Using ai_mask here would
+            # overwrite already-completed adjudications with "pending" — on a
+            # resumed run that silently destroys every AI decision made so far.
+            unadjudicated = ai_mask & (
+                scored_df["method"].fillna("") != "ai_adjudication"
+            )
+            scored_df.loc[unadjudicated, "decision"] = "needs_ai"
+            scored_df.loc[unadjudicated, "method"] = "pending"
+            logger.info(
+                f"AI adjudication skipped — {int(unadjudicated.sum())} pair(s) marked "
+                f"'needs_ai' ({int((ai_mask & ~unadjudicated).sum())} existing "
+                f"adjudications preserved)"
+            )
     else:
         # Batch AI adjudication
         gemini_client = _get_gemini_client()
