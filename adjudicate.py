@@ -42,6 +42,22 @@ logger = logging.getLogger(__name__)
 cost_tracker = APICostTracker()
 
 
+def _atomic_to_csv(df: pd.DataFrame, path: str):
+    """Write a DataFrame to CSV atomically (tmp file + fsync + os.replace).
+
+    adjudicated_pairs.csv is rewritten in full after every batch of 20 pairs and
+    runs to tens of megabytes, so a plain to_csv() leaves a wide window where an
+    interruption (Ctrl+C, crash, power loss) truncates the file mid-write and
+    silently destroys completed adjudications. os.replace() is atomic on POSIX,
+    so the file on disk is always a complete previous or complete new version.
+    """
+    tmp = f"{path}.tmp"
+    df.to_csv(tmp, index=False)
+    with open(tmp, "rb") as f:
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
 def detect_edge_case(row: pd.Series, has_na_title: bool = False) -> str:
     """
     Detect edge cases that need manual review regardless of decision tier.
@@ -409,7 +425,7 @@ def adjudicate_state(state: str, skip_ai: bool = False,
                     scored_df.loc[idx, "method"] = "ai_no_response"
 
             # Save progress after each batch (resume-safe)
-            scored_df.to_csv(output_path, index=False)
+            _atomic_to_csv(scored_df, output_path)
 
     # Triage: flag AI-adjudicated pairs for human review, BUT auto-accept:
     #   1. AI rejects at any confidence (100% accuracy in WY calibration)
@@ -458,13 +474,13 @@ def adjudicate_state(state: str, skip_ai: bool = False,
     )
 
     # Save final results
-    scored_df.to_csv(output_path, index=False)
+    _atomic_to_csv(scored_df, output_path)
 
     # Save edge cases separately
     edge_cases = scored_df[scored_df["edge_case"] != ""]
     if not edge_cases.empty:
         edge_path = os.path.join(state_dir, "edge_cases.csv")
-        edge_cases.to_csv(edge_path, index=False)
+        _atomic_to_csv(edge_cases, edge_path)
         logger.info(f"Saved {len(edge_cases)} edge cases to {edge_path}")
 
     # Save human review worklist: AI-adjudicated pairs flagged for confirmation.
@@ -472,7 +488,7 @@ def adjudicate_state(state: str, skip_ai: bool = False,
     review_pairs = scored_df[scored_df["needs_human_review"]]
     if not review_pairs.empty:
         review_path = os.path.join(state_dir, "human_review_pairs.csv")
-        review_pairs.to_csv(review_path, index=False)
+        _atomic_to_csv(review_pairs, review_path)
         logger.info(
             f"Saved {len(review_pairs)} pairs for human review "
             f"(AI-adjudicated, flagged for confirmation) to {review_path}"
