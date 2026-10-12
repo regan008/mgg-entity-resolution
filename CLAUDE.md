@@ -6,10 +6,11 @@ This is an **entity resolution pipeline** for the [Mapping the Gay Guides](https
 
 ## Current Status
 
-_Last updated 2026-08-25._
+_Last updated 2026-10-12._
 
 - **Wyoming (WY)** is complete and committed to `mgg.db`: **253 brick-and-mortar records → 57 unique venues**. This is the first state finished under the rebuilt pipeline and supersedes the April prototype result (358 records → 69 venues, which included cruising areas and used Claude Haiku).
-- **South Carolina (SC)** is in progress: 1,028 records → 350 draft venues, partway through venue review.
+- **South Carolina (SC)** is complete and committed: **1,028 records → 944 after 84 hand exclusions → 274 unique venues**.
+- **New York (NY)** — the case study for the article — is at adjudication: 11,419 records, 867,824 candidate pairs, 90,405 AI decisions; 300 pairs still need `--resume`, then 1,546 pairs of pair review.
 - Scope is **brick-and-mortar only** — cruising areas (`amenity_id=90`) are dropped in `preprocess.py`.
 - AI adjudication runs on **Gemini Flash Lite**; per-call cost is logged to `api_calls.csv`.
 - Stats logging (`pipeline_stats.py`) is integrated into every stage → `pipeline_stats.csv`.
@@ -101,7 +102,7 @@ template/Python edits require a dashboard restart to take effect (debug is off).
 
    _Superseded_: through April 2026 cruising areas were kept in the pipeline and merely *isolated* at the blocking stage (`block.py:cruising_compatible()`), so they were only ever compared against other cruising areas or NA-title records. That function no longer exists; `block.py` just notes the exclusion happened upstream. The DE-era figures for that approach (2,179 mixed pairs dropped, 127 NA-title↔cruising matches preserved) describe the old design and are kept only as history.
 
-9. **Human pair decisions are applied at consolidation.** `consolidate.py` overlays `human_review_decisions.csv` in memory on every run (via `review.apply_human_decisions`), so `adjudicated_pairs.csv` stays the pure AI/auto record. Before Oct 2026 nothing applied them unless `review.py` was run by hand, which it never was: WY's 12 rejections were redone manually in venue review, and SC was committed with 2 venues contradicting the reviewer's pair decisions ("Downtown" merged into Dudley's; Territorial Social Club / Midge's Lounge / Campground as one venue).
+9. **Human pair decisions are applied at consolidation.** `consolidate.py` overlays `human_review_decisions.csv` in memory on every run (via `review.apply_human_decisions`), so `adjudicated_pairs.csv` stays the pure AI/auto record. Before Oct 2026 nothing applied them unless `review.py` was run by hand, which it never was: WY's 12 rejections were redone manually in venue review, and SC was committed with 2 venues contradicting the reviewer's pair decisions ("Downtown" merged into Dudley's; Territorial Social Club / Midge's Lounge / Campground as one venue). Corrected Oct 2026 by splitting the three records out in venue review and re-committing (271 → 274 venues). Both venues had been marked reviewed in venue review, so the reviewer's pair-level and venue-level judgments disagreed.
 
 10. **Another machine**: `db_snapshot.py build`, then for each state `preprocess.py`, `block.py`, `score.py`, and `adjudicate.py STATE --restore` (attaches archived AI decisions, no API calls). Never re-run `consolidate.py`/`assign_ids.py` for a state in venue review — the committed draft holds merges/splits those scripts would overwrite.
 
