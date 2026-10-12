@@ -1,0 +1,9 @@
+location_id,venue_id,title,street_address,city,year,reason,excluded_at
+94028,WY-00002,,,Cheyenne,1998,cruisy,2026-08-25T08:32:12.625440
+1750,WY-00002,,,Cheyenne,2003,cruisy,2026-08-25T08:32:12.625440
+102281,WY-00003,,,Cheyenne,2002,not physical location,2026-08-25T08:32:26.423152
+1751,WY-00003,,,Cheyenne,2003,not physical location,2026-08-25T08:32:26.423152
+1749,WY-00001,,,Cheyenne,2003,cruisy,2026-08-25T08:33:30.504934
+90748,WY-00051,Holiday Park,,Cheyenne,1999,cruisy,2026-08-25T08:35:21.474083
+90980,WY-00052,Lions Park,,Cheyenne,1999,cruisy,2026-08-25T08:35:32.309159
+94027,WY-00053,,,Cheyenne,1998,cruisy,2026-08-25T08:35:40.397686

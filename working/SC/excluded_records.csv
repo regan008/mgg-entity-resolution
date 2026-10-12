@@ -1,0 +1,85 @@
+location_id,venue_id,title,street_address,city,year,reason,excluded_at
+93668,SC-00011,,,Charleston,1998,cruisy,2026-08-25T09:34:45.707314
+91912,SC-00011,Waterfront Park,,Charleston,1999,cruisy,2026-08-25T09:34:45.707314
+1465,SC-00011,,,Charleston,2003,cruisy,2026-08-25T09:34:45.707314
+82973,SC-00188,The Confidential Connection!,,Charleston,2000,not a physical location,2026-08-30T16:12:36.599751
+116119,SC-00188,The Confidential Connection!,,Charleston,2001,not a physical location,2026-08-30T16:12:36.599751
+82993,SC-00197,The Confidential Connection!,,Columbia,2000,not a physical location,2026-08-30T16:13:24.073605
+116125,SC-00197,Confidential Connection!,,Columbia,2001,not a physical location,2026-08-30T16:13:24.073605
+82994,SC-00198,Megaphone Columbia,,Columbia,2000,not a physical location,2026-08-30T16:13:40.877051
+116126,SC-00198,Megaphone Columbia,,Columbia,2001,not a physical location,2026-08-30T16:13:40.877051
+83005,SC-00201,Megaphone Greenville,,Greenville,2000,not a physical location,2026-08-30T16:13:55.336832
+116131,SC-00201,Megaphone Greenville,,Greenville,2001,not a physical location,2026-08-30T16:13:55.336832
+1454,SC-00001,,,Bowman,2003,(backfilled from venue_edit_log),2026-08-30T16:15:19.286808
+1457,SC-00004,,,Charleston,2003,cruisy area,2026-08-30T16:15:34.095660
+1461,SC-00008,,,Charleston,2003,(backfilled from venue_edit_log),2026-08-30T16:15:46.256393
+1466,SC-00012,,,Columbia,2003,(backfilled from venue_edit_log),2026-08-30T16:15:52.868574
+71075,SC-00163,Dolphin,Wentworth between King & Meeting,Charleston,1977,(backfilled from venue_edit_log),2026-08-30T16:17:17.332822
+91325,SC-00226,Pinckney Island Park,,Hilton Head,1999,(backfilled from venue_edit_log),2026-08-30T16:17:27.559068
+91539,SC-00227,Senate Street,,Columbia,1999,(backfilled from venue_edit_log),2026-08-30T16:17:37.011014
+91137,SC-00225,Millikan Park,,Spartanburg,1999,(backfilled from venue_edit_log),2026-08-30T16:18:03.091798
+91828,SC-00230,Timrod Park,,Florence,1999,(backfilled from venue_edit_log),2026-08-30T16:18:12.139242
+152441,SC-00334,Truck Stops I-85 btwn exit 62 & 66,,Spartanburg,1991,cruisy,2026-08-30T16:33:15.514984
+1468,SC-00014,,,Columbia,2003,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+1470,SC-00016,,,Florence,2003,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+1471,SC-00017,,,Florence,2003,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+1476,SC-00022,,,Myrtle Beach,2003,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+1477,SC-00023,,,Myrtle Beach,2003,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+93680,SC-00024,,,Myrtle Beach,1998,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+1478,SC-00024,,,Myrtle Beach,2003,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+1475,SC-00021,,,Hilton Head,2003,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+1474,SC-00020,,,Hilton Head,2003,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+1479,SC-00025,,,Spartanburg,2003,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+93662,SC-00233,,,Charleston,1998,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+93663,SC-00234,,,Charleston,1998,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+93666,SC-00235,,,Charleston,1998,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+93673,SC-00240,,,Columbia,1998,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+93674,SC-00241,,,Columbia,1998,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+93675,SC-00242,,,Florence,1998,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+93676,SC-00243,,,Florence,1998,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+93672,SC-00239,,,Columbia,1998,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+93671,SC-00238,,,Columbia,1998,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+93679,SC-00246,,,Myrtle Beach,1998,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+93681,SC-00247,,,Spartanburg,1998,cruisy or unclear if cruisy,2026-08-30T16:38:35.727513
+90510,SC-00218,Folly Beach,,Charleston,1999,cruisy,2026-08-30T16:45:05.517816
+93659,SC-00002,,,Charleston,1998,cruisy,2026-08-30T17:04:15.473265
+101926,SC-00002,,,Charleston,2002,cruisy,2026-08-30T17:04:15.473265
+1455,SC-00002,,,Charleston,2003,cruisy,2026-08-30T17:04:15.473265
+93678,SC-00245,,,Hilton Head,1998,cruisy or no physical address,2026-08-30T17:04:54.866075
+93677,SC-00244,,,Hilton Head,1998,cruisy or no physical address,2026-08-30T17:04:54.866075
+101948,SC-00244,,,Hilton Head,2002,cruisy or no physical address,2026-08-30T17:04:54.866075
+93670,SC-00237,,,Columbia,1998,cruisy or no physical address,2026-08-30T17:04:54.866075
+93669,SC-00236,,,Columbia,1998,cruisy or no physical address,2026-08-30T17:04:54.866075
+101938,SC-00236,,,Columbia,2002,cruisy or no physical address,2026-08-30T17:04:54.866075
+93661,SC-00232,,,Charleston,1998,cruisy or no physical address,2026-08-30T17:04:54.866075
+101928,SC-00232,,,Charleston,2002,cruisy or no physical address,2026-08-30T17:04:54.866075
+93660,SC-00231,,,Charleston,1998,cruisy or no physical address,2026-08-30T17:04:54.866075
+101955,SC-00027,,,Statewide,2002,cruisy or no physical address,2026-08-30T17:04:54.866075
+1481,SC-00027,,,Statewide,2003,cruisy or no physical address,2026-08-30T17:04:54.866075
+101954,SC-00026,,,Statewide,2002,cruisy or no physical address,2026-08-30T17:04:54.866075
+1480,SC-00026,,,Statewide,2003,cruisy or no physical address,2026-08-30T17:04:54.866075
+101946,SC-00019,,,Greenville,2002,cruisy or no physical address,2026-08-30T17:04:54.866075
+1473,SC-00019,,,Greenville,2003,cruisy or no physical address,2026-08-30T17:04:54.866075
+101945,SC-00018,,,Greenville,2002,cruisy or no physical address,2026-08-30T17:04:54.866075
+1472,SC-00018,,,Greenville,2003,cruisy or no physical address,2026-08-30T17:04:54.866075
+101942,SC-00015,,,Columbia,2002,cruisy or no physical address,2026-08-30T17:04:54.866075
+1469,SC-00015,,,Columbia,2003,cruisy or no physical address,2026-08-30T17:04:54.866075
+101940,SC-00013,,,Columbia,2002,cruisy or no physical address,2026-08-30T17:04:54.866075
+1467,SC-00013,,,Columbia,2003,cruisy or no physical address,2026-08-30T17:04:54.866075
+101936,SC-00010,,,Charleston,2002,cruisy or no physical address,2026-08-30T17:04:54.866075
+1464,SC-00010,,,Charleston,2003,cruisy or no physical address,2026-08-30T17:04:54.866075
+101934,SC-00009,,,Charleston,2002,cruisy or no physical address,2026-08-30T17:04:54.866075
+1462,SC-00009,,,Charleston,2003,cruisy or no physical address,2026-08-30T17:04:54.866075
+101932,SC-00007,,,Charleston,2002,cruisy or no physical address,2026-08-30T17:04:54.866075
+1460,SC-00007,,,Charleston,2003,cruisy or no physical address,2026-08-30T17:04:54.866075
+93665,SC-00006,,,Charleston,1998,cruisy or no physical address,2026-08-30T17:04:54.866075
+93667,SC-00006,,,Charleston,1998,cruisy or no physical address,2026-08-30T17:04:54.866075
+101931,SC-00006,,,Charleston,2002,cruisy or no physical address,2026-08-30T17:04:54.866075
+101935,SC-00006,,,Charleston,2002,cruisy or no physical address,2026-08-30T17:04:54.866075
+1459,SC-00006,,,Charleston,2003,cruisy or no physical address,2026-08-30T17:04:54.866075
+1463,SC-00006,,,Charleston,2003,cruisy or no physical address,2026-08-30T17:04:54.866075
+93664,SC-00005,,,Charleston,1998,cruisy or no physical address,2026-08-30T17:04:54.866075
+101930,SC-00005,,,Charleston,2002,cruisy or no physical address,2026-08-30T17:04:54.866075
+1458,SC-00005,,,Charleston,2003,cruisy or no physical address,2026-08-30T17:04:54.866075
+101927,SC-00003,,,Charleston,2002,cruisy or no physical address,2026-08-30T17:04:54.866075
+1456,SC-00003,,,Charleston,2003,cruisy or no physical address,2026-08-30T17:04:54.866075

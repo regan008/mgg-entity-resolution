@@ -1,0 +1,194 @@
+venue_id,member_ids,group_size,needs_review,confidence,rationale,flag_type
+SC-00002,"[1455, 93659, 101926]",3,False,1.0,The records consistently describe the same church location and meeting times.,uncertain_group
+SC-00003,"[1456, 101927]",2,False,1.0,The records refer to the same location and operating hours.,uncertain_group
+SC-00005,"[1458, 93664, 101930]",3,False,0.9,"The records share the same phone number, indicating a consistent listing.",uncertain_group
+SC-00006,"[1459, 1463, 93665, 93667, 101931, 101935]",6,True,1.0,"The group contains two distinct phone numbers associated with different regional newspaper editions, which should not be grouped as a single venue.",uncertain_group
+SC-00007,"[1460, 101932]",2,False,1.0,The records consistently describe the same annual festival.,uncertain_group
+SC-00009,"[1462, 101934]",2,False,1.0,"The records share the same phone number and service description, representing a consistent listing.",uncertain_group
+SC-00010,"[1464, 101936]",2,False,1.0,The records share the same phone number and description.,uncertain_group
+SC-00013,"[1467, 101940]",2,False,1.0,The records share the same toll-free number and service description.,uncertain_group
+SC-00015,"[1469, 101942]",2,True,1.0,"The records have different phone numbers, suggesting they are distinct listings or services.",uncertain_group
+SC-00018,"[1472, 101945]",2,True,1.0,"The records have completely different phone numbers and descriptions, indicating they are not the same entity.",uncertain_group
+SC-00019,"[1473, 101946]",2,False,1.0,These are clearly the same phone-based service with minor descriptive text variations.,uncertain_group
+SC-00024,"[1478, 93680]",2,False,1.0,These are the same location with minor spelling variations in the description.,uncertain_group
+SC-00026,"[1480, 101954]",2,False,1.0,These are the same statewide service with identical phone numbers.,uncertain_group
+SC-00027,"[1481, 101955]",2,False,1.0,These are the same statewide service with identical phone numbers.,uncertain_group
+SC-00028,"[1843, 107413, 113332]",3,False,1.0,These are consistent records for the same venue.,uncertain_group
+SC-00030,"[2590, 82954, 88989, 94574, 107415, 113333, 116860, 129101, 130394, 141120]",10,False,1.0,These are consistent records for the same B&B with minor name and phone formatting changes.,uncertain_group
+SC-00031,"[2591, 82955, 88990, 94127, 107416, 113334, 117004]",7,False,0.9,The name variation between Radcliff and Radcliffe is a common spelling correction for the same street address.,uncertain_group
+SC-00032,"[2592, 107418, 113336]",3,False,0.9,The city change from Folly Beach to Charleston is a common geographic categorization shift for the same specific address.,uncertain_group
+SC-00033,"[2593, 107420, 122142, 130736, 141121, 152406, 158458, 164758]",8,False,0.8,"Despite the 1997 record missing the street address, the phone number and name are consistent with the other records for this B&B.",uncertain_group
+SC-00034,"[2594, 82956, 88991, 107417, 113335]",5,False,1.0,These are consistent records for the same venue.,uncertain_group
+SC-00036,"[2596, 82960, 107422, 113338]",4,False,1.0,The records represent the same venue with minor name variations and consistent address/phone number.,uncertain_group
+SC-00038,"[2598, 107423, 113340]",3,False,1.0,"The records are consistent across all years with the same name, address, and phone number.",uncertain_group
+SC-00039,"[2599, 82964, 88997, 95321, 107425, 113342]",6,False,1.0,"The records are consistent across all years with the same name, address, and phone number.",uncertain_group
+SC-00040,"[2600, 82963, 88996, 94171, 107424, 113341, 119049, 129108]",8,False,1.0,The records are consistent across all years with minor spelling variations and consistent address/phone number.,uncertain_group
+SC-00041,"[2601, 82965, 88998, 94279, 107426, 113343, 116592]",7,False,0.9,The name change from 'Suzanne' to 'Suzanna' is a minor transcription variation for the same address and phone number.,uncertain_group
+SC-00044,"[2604, 82968, 89001, 94400, 107429, 113346, 116712]",7,False,0.9,The records are consistent with minor spelling variations in the street name and venue name.,uncertain_group
+SC-00045,"[2605, 82966, 88999, 94136, 107427, 113344]",6,False,0.9,"The records are consistent, though the operating hours changed significantly between 2001 and 2002, which is common for long-running venues.",uncertain_group
+SC-00046,"[2606, 107428]",2,False,1.0,"The records are consistent across all years with the same name, address, and phone number.",uncertain_group
+SC-00047,"[2607, 82969, 107430, 113347]",4,False,1.0,"The records are consistent across all years with the same name, address, and phone number.",uncertain_group
+SC-00048,"[2608, 82974, 107431, 113349]",4,False,1.0,"The records are consistent across all years with the same name, address, and phone number.",uncertain_group
+SC-00049,"[2895, 107432, 113350]",3,False,1.0,The records consistently refer to the same AA group at the same address with the same phone number.,uncertain_group
+SC-00050,"[2896, 12835, 18862, 82987, 89007, 98363, 107436, 113356, 120232, 129120, 141134, 146674, 152420, 158470, 164770]",15,False,0.9,The minor address change from 1911 to 1903 is likely a correction or re-numbering of the same venue.,uncertain_group
+SC-00051,"[2897, 82981, 89003, 97558, 107433, 113351, 119491, 129118, 141131, 164768]",10,False,0.9,The records show a logical evolution of an organization from a phone line to a physical community center at the same address.,uncertain_group
+SC-00052,"[2898, 18863, 82984, 89004, 97392, 107435, 113354, 129121, 132504, 141135, 146675, 152421, 158471, 164771]",14,False,1.0,The variations between 'Capitol' and 'Capital' are minor spelling inconsistencies for the same venue.,uncertain_group
+SC-00053,"[2899, 107438]",2,False,1.0,The records are consistent for the same venue.,uncertain_group
+SC-00054,"[2900, 82988, 107437, 113357]",4,False,0.9,The name change reflects the addition of a secondary branding or sub-venue ('Oz') within the same location.,uncertain_group
+SC-00056,"[2902, 82992, 107441, 113361]",4,False,1.0,The records are consistent for the same venue.,uncertain_group
+SC-00057,"[2903, 82990, 89010, 98457, 107440, 113359, 120308]",7,False,1.0,The records are consistent for the same venue.,uncertain_group
+SC-00058,"[2904, 82995, 89012, 99665, 107442, 113362, 121358, 129130, 134192]",9,False,1.0,The records are consistent for the same venue.,uncertain_group
+SC-00060,"[3610, 107444, 113366]",3,False,0.9,"The records are consistent, with minor OCR noise in the phone number.",uncertain_group
+SC-00061,"[3611, 83002, 89014, 94336, 107445, 113367, 129135, 130225, 141147, 158485, 164786]",11,False,1.0,Minor variations in name and address formatting over time are consistent with the same venue.,uncertain_group
+SC-00062,"[3612, 83003, 89015, 96713, 107446, 113368, 118742, 129136]",8,False,0.9,The name change from Club 621 to Club 21 and back is likely a transcription error or minor rebranding at the same address.,uncertain_group
+SC-00063,"[3613, 18886, 83004, 89016, 96884, 107447, 113369, 118890, 129137, 132115, 141148, 146690, 152431, 158486, 164787]",15,False,1.0,Consistent address and phone number confirm this is the same venue despite minor spelling variations.,uncertain_group
+SC-00065,"[4796, 107451, 113374]",3,True,0.9,"The venue name changes from Club Paradox to Club Blue in 2003, and the phone number changes significantly, suggesting a potential change in ownership or business.",uncertain_group
+SC-00066,"[4797, 83011, 89019, 94165, 107450, 113373, 129144, 131786, 141151, 152435, 158490, 164792]",12,False,1.0,Consistent address and phone number confirm this is the same venue.,uncertain_group
+SC-00067,"[4798, 107449, 113371]",3,False,1.0,"Consistent name, address, and phone numbers confirm this is the same venue.",uncertain_group
+SC-00069,"[4800, 107452]",2,False,1.0,"Consistent name, address, and phone number confirm this is the same venue.",uncertain_group
+SC-00070,"[4801, 83015, 107453, 113377]",4,True,0.8,"The record explicitly lists two different addresses for the same business, which may lead to confusion in mapping.",uncertain_group
+SC-00071,"[6113, 83019, 89023, 96126, 107454, 113378, 118209, 141156, 146699, 152439, 158495, 164798]",12,False,1.0,"Consistent name, address, and phone number confirm this is the same venue.",uncertain_group
+SC-00072,"[6918, 94223, 107455, 113380]",4,False,1.0,Minor variations in name and address formatting are consistent with the same venue.,uncertain_group
+SC-00073,"[7324, 107456, 113381]",3,False,1.0,The records consistently refer to the same business name and address.,uncertain_group
+SC-00075,"[12822, 12823, 18849, 18850, 24896, 26965, 26966]",7,False,0.9,The variations in address and name are minor and likely represent the same business over time.,uncertain_group
+SC-00076,"[12824, 18852, 24898, 82959, 88994, 96002, 107421, 118112, 129106, 131454, 141123, 146665, 152409, 158461, 164761]",15,True,0.9,"The 2002 record 'Downtown' at the same address has a different phone number and name, suggesting a change in business ownership or identity.",uncertain_group
+SC-00077,"[12825, 24899]",2,False,1.0,The records are consistent across the two years.,uncertain_group
+SC-00078,"[12826, 18854, 24900, 27926]",4,False,1.0,The records are consistent across the years.,uncertain_group
+SC-00079,"[82961, 88995, 94118, 116601, 129105, 141124, 146664, 152408, 158460, 164760]",10,False,0.8,"While the name changes to 'Liberty Place' in 1994, the address and phone number remain consistent, suggesting a rebranding of the same venue.",uncertain_group
+SC-00080,"[12828, 24901, 30803]",3,False,1.0,The records are consistent across the years.,uncertain_group
+SC-00081,"[12829, 18856, 24902]",3,False,1.0,The records are consistent across the years.,uncertain_group
+SC-00082,"[12830, 24903]",2,False,1.0,The records are consistent across the years.,uncertain_group
+SC-00084,"[12836, 18864, 24906, 27061, 146677]",5,False,0.9,The name change from 'Chalet IV' to 'Chateau IV' is a likely transcription error or minor rebranding at the same address.,uncertain_group
+SC-00086,"[12838, 18865, 141141, 146678, 158476, 164776]",6,False,1.0,Consistent business name and address over time.,uncertain_group
+SC-00087,"[12839, 18866]",2,False,1.0,Consistent business name and address.,uncertain_group
+SC-00088,"[12840, 24907, 29232, 34506, 39625, 44579, 54131, 59675, 97569, 119502]",10,True,0.8,"The group includes a significant address change from Gist St to Seminole Rd to Belleview, which may represent different locations for the MCC congregation over time.",uncertain_group
+SC-00089,"[12841, 18867, 146679]",3,False,1.0,Consistent business name and address.,uncertain_group
+SC-00090,"[12842, 18869, 24910, 82986, 89006, 96207, 113355, 118278, 129125]",9,False,1.0,Consistent business name and address.,uncertain_group
+SC-00091,"[12843, 18870]",2,False,1.0,Minor spelling variation of the same business name.,uncertain_group
+SC-00092,"[12854, 18879, 24919, 30754, 40997, 50607, 61215, 72339, 72340, 72341, 76188, 168382, 173005]",13,False,0.9,The variations in address are descriptive of the same landmark location (South of the Border) on I-95.,uncertain_group
+SC-00093,"[12855, 18880, 146683, 152426]",4,False,1.0,Consistent business name and address.,uncertain_group
+SC-00094,"[12860, 18885, 54120, 59700, 95857, 116876, 146692, 152433, 158487, 164788]",10,True,0.7,"The group includes a move from a P.O. Box to a church address, and then a final move to Lloyd St, which may represent distinct physical locations for the congregation.",uncertain_group
+SC-00095,"[12867, 18893, 24933, 29763, 60248, 141150, 146695, 152434, 158489, 164791]",10,False,1.0,Consistent business name and address with minor spelling variations.,uncertain_group
+SC-00096,"[12871, 18896, 24936]",3,False,1.0,The records represent the same business with minor address formatting variations.,uncertain_group
+SC-00099,"[18855, 39646, 54127, 59724, 98450, 120303, 146666, 152410, 158462, 164762]",10,False,0.9,"The records show a transition from a P.O. Box to a physical location and subsequent moves, all linked by the same phone number.",uncertain_group
+SC-00101,"[18861, 118913, 129119, 141132, 152417, 158469, 164769]",7,False,1.0,The records represent the same business with minor address spelling corrections.,uncertain_group
+SC-00103,"[18892, 158488, 164789]",3,False,1.0,The records represent the same business with minor address formatting variations.,uncertain_group
+SC-00104,"[24897, 27089]",2,False,0.9,"The address is consistent, and the city change reflects the common ambiguity between North Charleston and Charleston.",uncertain_group
+SC-00105,"[24908, 29845, 35025, 40181, 45088, 50439, 54686, 60330, 71954]",9,False,1.0,The records represent the same business with consistent address and name over time.,uncertain_group
+SC-00106,"[24909, 29975]",2,False,1.0,The records represent the same business with consistent address and name.,uncertain_group
+SC-00107,"[24924, 27235, 32933, 37875, 43056, 52318, 57764]",7,False,1.0,The records represent the same business with minor address formatting variations.,uncertain_group
+SC-00109,"[26517, 57085]",2,False,1.0,The records represent the same business with consistent address and name.,uncertain_group
+SC-00110,"[27099, 52183, 57631]",3,False,0.9,The name change from Cheeks to Cheeks II at the same address is a common progression for a single venue.,uncertain_group
+SC-00113,"[27990, 33533, 38538, 43645, 50103, 53000, 58505]",7,False,1.0,The records consistently refer to the same venue name and address over time.,uncertain_group
+SC-00114,"[28112, 58634]",2,False,1.0,The records are consistent in name and address.,uncertain_group
+SC-00115,"[28726, 34092, 39168, 53652, 59231]",5,False,1.0,The address variations are minor and clearly refer to the same location.,uncertain_group
+SC-00119,"[31477, 36396, 41671, 46392, 50747, 56197, 61934]",7,False,1.0,The records are consistent in name and address.,uncertain_group
+SC-00120,"[31715, 72743, 76293]",3,False,0.9,"The records refer to the same venue, with the 1986 entry simply missing the street name.",uncertain_group
+SC-00121,"[32235, 42383, 49807]",3,False,1.0,The records are consistent in name and address.,uncertain_group
+SC-00122,"[32793, 42916, 52151]",3,False,1.0,The records are consistent in name and address.,uncertain_group
+SC-00123,"[34351, 39449, 44436, 53931]",4,False,1.0,The records are consistent in name and address.,uncertain_group
+SC-00124,"[34632, 39775, 44710]",3,False,1.0,The records are consistent in name and address.,uncertain_group
+SC-00125,"[34895, 44968, 50402]",3,False,1.0,The records are consistent in name and address.,uncertain_group
+SC-00126,"[35411, 45463]",2,False,1.0,The records represent the same venue with consistent name and address.,uncertain_group
+SC-00127,"[35749, 45797, 55533]",3,False,1.0,The address variations are minor formatting differences for the same location.,uncertain_group
+SC-00128,"[12861, 18887, 24925, 30862, 35853, 41098, 45902, 55629, 61319, 146691, 152432]",11,False,0.9,"The venue appears to have relocated from 200 N. Pleasantburg Dr. to 8 Le Grand Blvd, which is a common occurrence for businesses over a long period.",uncertain_group
+SC-00129,"[35860, 41108, 55641, 61330]",4,False,0.9,The address change from 336 to 346 is likely a minor correction or renumbering of the same storefront.,uncertain_group
+SC-00130,"[35903, 45950, 50644, 72412]",4,False,0.9,The name change from Sundance to Sundown is likely a minor correction or rebranding of the same business at the same address.,uncertain_group
+SC-00131,"[36349, 41614, 46345, 50729]",4,False,1.0,The records are consistent across all years.,uncertain_group
+SC-00132,"[36517, 56338, 62072]",3,False,1.0,The address variations are minor descriptive differences for the same location.,uncertain_group
+SC-00133,"[37714, 57596]",2,False,1.0,The records are consistent across all years.,uncertain_group
+SC-00135,"[39167, 53650]",2,False,1.0,The records are consistent across all years.,uncertain_group
+SC-00136,"[39366, 53853, 59442]",3,False,0.8,The change in P.O. Box is a common administrative update for an organization.,uncertain_group
+SC-00138,"[41210, 55743]",2,False,1.0,The records represent the same venue with consistent name and address.,uncertain_group
+SC-00140,"[42249, 49782]",2,False,1.0,The records represent the same venue with consistent name and address.,uncertain_group
+SC-00141,"[44274, 50249]",2,False,1.0,The records represent the same venue with consistent name and address.,uncertain_group
+SC-00143,"[46228, 50708, 70431]",3,False,1.0,The records represent the same venue with consistent name and address.,uncertain_group
+SC-00146,"[49962, 70912, 70913]",3,False,1.0,The records represent the same venue with minor address formatting variations.,uncertain_group
+SC-00147,"[49977, 70944, 70945, 70946, 75768, 167996, 172361]",7,False,0.95,The records show a logical progression of address detail for the same venue over time.,uncertain_group
+SC-00149,"[50301, 71663, 71664]",3,False,1.0,The records represent the same venue with consistent name and address.,uncertain_group
+SC-00150,"[50461, 71140]",2,False,0.9,The name change from 'End Zone' to 'Paul's End Zone' at the same address is a common minor variation.,uncertain_group
+SC-00151,"[53061, 58567]",2,False,1.0,The records represent the same venue with consistent name and address.,uncertain_group
+SC-00152,"[53889, 59487]",2,False,1.0,The records represent the same venue with consistent name and address.,uncertain_group
+SC-00159,"[70290, 71221, 71222, 75852, 168067, 172483, 172484]",7,False,1.0,The records consistently refer to the same venue name and address over time.,uncertain_group
+SC-00160,"[70437, 76271, 168461, 173144, 173145, 175102, 177752, 177753, 179048, 181589, 181590, 181591]",12,False,0.9,The minor address fluctuation between 330 and 336 King St is likely a clerical error or minor renumbering.,uncertain_group
+SC-00165,"[71376, 71377, 71378, 75897, 168110, 172546]",6,False,1.0,The variations in name are clearly abbreviations or stylistic changes for the same venue.,uncertain_group
+SC-00166,"[71403, 71404]",2,False,1.0,The records represent the same venue with a minor address formatting difference.,uncertain_group
+SC-00167,"[71429, 71430, 75911, 168131, 172567]",5,True,0.8,"The address in 1978 lists I-65 instead of I-95, which is a significant discrepancy that should be verified.",uncertain_group
+SC-00168,"[71624, 71625, 71626]",3,False,1.0,The records consistently refer to the same venue name and address.,uncertain_group
+SC-00169,"[71657, 75980]",2,False,1.0,The records are identical in name and address.,uncertain_group
+SC-00171,"[71906, 71907, 76052, 168252]",4,True,0.7,"The address changes from 1536 to 1636 Sumter St, which may indicate a move or a significant transcription error.",uncertain_group
+SC-00173,"[71998, 76084, 172832, 172833]",4,False,0.9,The descriptive location details consistently point to the same physical spot across the years.,uncertain_group
+SC-00174,"[75674, 167917]",2,False,1.0,The records are consistent in name and address.,uncertain_group
+SC-00178,"[82951, 89830, 116111, 121892, 129098, 135912, 141118, 158457, 164756]",9,False,1.0,These records consistently refer to the same organization and meeting location over time.,uncertain_group
+SC-00179,"[82952, 90186, 116112, 122356, 129099, 135913, 135915]",7,False,1.0,These records consistently refer to the same business entity and contact information.,uncertain_group
+SC-00180,"[82953, 90972, 116113, 122966, 129100, 135916, 141119, 164757]",8,False,1.0,"These records represent the same organization, with minor variations in name and contact details over time.",uncertain_group
+SC-00181,"[82957, 88992, 107419, 113337]",4,False,1.0,These records consistently refer to the same lodging venue at the same address.,uncertain_group
+SC-00182,"[82958, 90097, 116114, 129102]",4,False,1.0,These records consistently refer to the same B&B business.,uncertain_group
+SC-00183,"[82962, 118352]",2,False,0.9,The address change from 447 to 445 is a minor discrepancy likely representing the same physical location.,uncertain_group
+SC-00184,"[82967, 89000, 99206, 113345, 120967, 129109]",6,False,0.9,The name and location variations are minor and clearly refer to the same establishment.,uncertain_group
+SC-00185,"[82970, 116115]",2,False,1.0,These records refer to the same annual festival.,uncertain_group
+SC-00186,"[82971, 91704, 116116, 129110, 135914, 141126]",6,False,1.0,"These records refer to a regional publication, which is correctly grouped despite being listed under Charleston.",uncertain_group
+SC-00187,"[82972, 91379, 116118, 129112, 135919, 141127]",6,False,1.0,"These records refer to a regional publication, which is correctly grouped despite being listed under Charleston.",uncertain_group
+SC-00188,"[82973, 116119]",2,False,1.0,These are consistent entries for a phone-based service in the same city.,uncertain_group
+SC-00189,"[82975, 89002, 98511, 113348, 120356, 129113, 133361, 141139, 146667, 152411, 158463, 164763]",12,False,0.9,"The business name changes from Big Jim's to Excited Video, but they share the same address and phone number, suggesting a rebranding of the same venue.",uncertain_group
+SC-00190,"[82979, 89799, 121864, 129116, 152415, 158467, 164767]",7,False,1.0,Consistent entries for a recurring community service listing.,uncertain_group
+SC-00191,"[82980, 90163, 116124, 122350, 129117]",5,False,1.0,Consistent entries for a recurring service listing.,uncertain_group
+SC-00192,"[82982, 107434, 113352]",3,False,0.9,The city change from Columbia to Camden is explained by the description noting it is 35 minutes outside of Columbia.,uncertain_group
+SC-00194,"[82985, 89005]",2,True,0.8,"The phone number changes significantly between 1999 and 2000, which may indicate a change in ownership or a different business entity.",uncertain_group
+SC-00195,"[82989, 89009, 97263, 107439, 113358]",5,False,1.0,Minor address typo and consistent phone number confirm this is the same venue.,uncertain_group
+SC-00196,"[82991, 89011, 98435, 113360]",4,False,1.0,Consistent entries for a retail business.,uncertain_group
+SC-00197,"[82993, 116125]",2,False,1.0,Consistent entries for a phone-based service.,uncertain_group
+SC-00198,"[82994, 116126]",2,False,1.0,Consistent entries for a phone-based service.,uncertain_group
+SC-00199,"[82998, 89013, 96487, 107443, 113363]",5,False,1.0,"Consistent business name, address, and phone number across all records.",uncertain_group
+SC-00201,"[83005, 116131]",2,False,1.0,Consistent business name and phone number for a service-based listing.,uncertain_group
+SC-00202,"[83006, 90200, 116132, 122364, 129140, 135924]",6,False,1.0,Consistent business name and phone number for a service-based listing.,uncertain_group
+SC-00203,"[83007, 89018, 116686, 141149]",4,False,0.9,"The address change from 1 to 11 is likely a minor clerical correction, and the name change is clearly identified as the same venue.",uncertain_group
+SC-00204,"[83010, 113372]",2,False,1.0,"Consistent business name, address, and phone number.",uncertain_group
+SC-00206,"[83013, 89021, 113376]",3,False,1.0,Consistent address and phone number; the name variation is minor.,uncertain_group
+SC-00207,"[83014, 89022, 94206, 120334, 129146, 133334, 141153, 164794]",8,False,1.0,Consistent address and phone number with minor variations in the descriptive name.,uncertain_group
+SC-00208,"[83020, 89024, 97372, 113379, 119337, 129149, 132489, 141157, 158496, 164799]",10,False,1.0,Consistent address and phone number with minor spelling variations in the name.,uncertain_group
+SC-00209,"[83021, 89025]",2,False,1.0,"Consistent business name, address, and phone number.",uncertain_group
+SC-00210,"[83064, 113392]",2,False,1.0,"Consistent business name, address, and phone number.",uncertain_group
+SC-00211,"[88993, 95746]",2,False,0.9,The address is consistent and the city change reflects the proximity of Goose Creek to the Charleston metropolitan area.,uncertain_group
+SC-00212,"[89008, 98278, 120150]",3,False,1.0,"The records are identical in name, address, and phone number.",uncertain_group
+SC-00213,"[89017, 96121, 118203]",3,False,1.0,"The records are identical in name, address, and phone number.",uncertain_group
+SC-00221,"[90798, 90799, 122801, 129111, 129129]",5,True,0.9,"This is a publication/organization with a PO Box, not a physical venue, and it is being listed in two different cities simultaneously.",uncertain_group
+SC-00228,"[91582, 123455, 129127, 141138]",4,False,0.9,The minor name variation is clearly the same state organization.,uncertain_group
+SC-00232,"[93661, 101928]",2,False,0.9,These are listings for the same service provider using the same toll-free number.,uncertain_group
+SC-00236,"[93669, 101938]",2,False,0.9,These are listings for the same service provider using the same toll-free number.,uncertain_group
+SC-00244,"[93677, 101948]",2,False,0.9,These are listings for the same service provider using the same toll-free number (with a minor typo in the 2002 record).,uncertain_group
+SC-00248,"[94120, 116653, 129103, 130231]",4,False,1.0,"The records are consistent in name, address, and phone number.",uncertain_group
+SC-00252,"[97423, 129143, 132524]",3,False,0.9,The name change is a minor abbreviation and the address remains consistent.,uncertain_group
+SC-00257,"[98915, 120710]",2,False,1.0,"The records are identical in name, address, and contact information.",uncertain_group
+SC-00259,"[99095, 120857]",2,False,1.0,"The records are identical in name, address, and contact information.",uncertain_group
+SC-00279,"[118701, 129128]",2,False,1.0,Minor formatting differences in address and suite number do not indicate a different venue.,uncertain_group
+SC-00284,"[122740, 129104, 135920]",3,False,0.9,"The records describe the same business, with the address clarifying over time as Folly Beach, Charleston.",uncertain_group
+SC-00286,"[129107, 131456, 141125]",3,False,0.9,Minor variations in name and address formatting are consistent with the same venue.,uncertain_group
+SC-00287,"[129122, 132628]",2,True,0.9,"The records list the same business name and address, but place it in two different cities (Charleston vs. Columbia).",uncertain_group
+SC-00291,"[129133, 133746, 141143, 158480, 164780]",5,False,0.9,Minor spelling variations and phone number updates are consistent with the same venue over time.,uncertain_group
+SC-00296,"[129145, 132957, 141152]",3,False,1.0,"The records are identical in name, address, and contact information.",uncertain_group
+SC-00307,"[135910, 141130]",2,False,1.0,The records are identical in name and contact information.,uncertain_group
+SC-00312,"[141136, 158474, 164773]",3,False,1.0,"The records are consistent in name and address, with minor descriptive variations.",uncertain_group
+SC-00313,"[141137, 158475, 164774]",3,False,1.0,Consistent name and address for a single business.,uncertain_group
+SC-00314,"[141140, 164775]",2,False,1.0,Consistent name and contact information for a service.,uncertain_group
+SC-00316,"[146661, 152405]",2,False,1.0,Minor spelling correction from 'Acceptence' to 'Acceptance'.,uncertain_group
+SC-00317,"[146662, 152407, 158459, 164759]",4,False,1.0,Consistent name and address for a B&B.,uncertain_group
+SC-00320,"[146671, 152416, 158468]",3,False,1.0,Consistent name and PO Box for an organization.,uncertain_group
+SC-00322,"[146673, 152419]",2,False,1.0,Minor variation in name formatting for the same address.,uncertain_group
+SC-00325,"[146687, 152429, 158483, 164784]",4,False,1.0,Minor spelling variations for the same service and phone number.,uncertain_group
+SC-00329,"[146696, 152436, 158491, 164793]",4,False,1.0,Consistent name and address for a seasonal venue.,uncertain_group
+SC-00335,"[158473, 164772]",2,False,1.0,Consistent name and address for a venue.,uncertain_group
+SC-00339,"[167958, 172290, 172291, 174949, 177706]",5,False,0.9,"The records show a clear progression of name changes for the same physical location, often referencing 'Midge's' as the underlying identity.",uncertain_group
+SC-00340,"[168189, 173071, 173072, 175077, 177718, 177719, 179032, 181556, 181557, 181558]",10,False,1.0,The records represent a consistent venue name and address with only minor formatting variations.,uncertain_group
+SC-00346,"[173017, 175055, 177684]",3,False,1.0,The records represent a consistent venue name and address with only minor formatting variations.,uncertain_group
+SC-00349,"[173185, 173186]",2,False,1.0,The records represent a consistent venue name and address.,uncertain_group
+SC-00350,"[174747, 177230, 177231]",3,False,1.0,The records represent a consistent venue name and address with only minor formatting variations.,uncertain_group
+SC-00351,"[174853, 177382, 177383]",3,False,0.9,The name variations and address correction (Tow Notch to Two Notch) are consistent with the same venue over time.,uncertain_group
+SC-00352,"[174926, 177502]",2,False,1.0,The records represent a consistent venue name and description.,uncertain_group
+SC-00353,"[174981, 177573]",2,False,1.0,The records represent a consistent venue name and description.,uncertain_group
+SC-00354,"[175007, 177621]",2,False,1.0,The records represent a consistent venue name and address.,uncertain_group
+SC-00355,"[177435, 178907, 181297]",3,False,1.0,The records represent a consistent venue name and address.,uncertain_group
+SC-00356,"[177545, 178963, 181408, 181409, 181411]",5,False,1.0,The records represent a consistent venue name with an address added in later years.,uncertain_group
+SC-00358,"[181472, 181474]",2,False,1.0,The records represent the same venue with consistent name and address.,uncertain_group
+SC-00360,"[12859, 18884, 24923, 141146, 146689, 152430, 158484, 164785]",8,False,1.0,The records represent the same venue with consistent name and address over several years.,uncertain_group
+SC-00362,"[76121, 168321, 172902]",3,False,0.9,"The records represent the same venue, with the 1974 entry simply missing the address details provided in subsequent years.",uncertain_group

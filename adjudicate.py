@@ -58,6 +58,122 @@ def _atomic_to_csv(df: pd.DataFrame, path: str):
     os.replace(tmp, path)
 
 
+AI_DECISIONS_FILE = "ai_decisions.csv.gz"
+AI_DECISION_COLUMNS = ["id_a", "id_b", "composite_score", "decision", "ai_confidence", "ai_rationale"]
+
+
+def _read_ai_decisions(path: str) -> pd.DataFrame:
+    df = pd.read_csv(path, keep_default_na=False, na_values=[""])
+    df["decision"] = df["decision"].fillna("").astype(str)
+    df["ai_rationale"] = df["ai_rationale"].fillna("").astype(str)
+    return df
+
+
+def export_ai_decisions(scored_df: pd.DataFrame, state_dir: str) -> int:
+    """Write every AI pair decision to working/{STATE}/ai_decisions.csv.gz.
+
+    adjudicated_pairs.csv runs to ~65 MB on a large state, but ~99% of it is
+    auto-match/auto-reject rows recomputed from scores. The AI's verdicts are the
+    only irreplaceable part: they cost money, temperature 0 doesn't guarantee
+    identical output on a rerun, and once the model is retired they can't be
+    reproduced at all. This file keeps just those rows (NY: 90k decisions in
+    ~0.6 MB) so they can be versioned and later restored with --restore.
+
+    Merges with any existing archive rather than replacing it, so a decision
+    is never dropped from the record just because the pair's score later
+    drifted out of the AI range. Current decisions win on overlap.
+
+    Always records the AI's own call: if review.py has overlaid a human
+    override onto the frame, the original AI decision is recovered from
+    human_review_decisions.csv.
+    """
+    from review import AI_DECIDED_METHODS, load_human_decisions
+
+    method = scored_df["method"].fillna("")
+    ai = scored_df.loc[method.isin(AI_DECIDED_METHODS),
+                       AI_DECISION_COLUMNS + ["method"]].copy()
+
+    overridden = ai["method"] == "human_overridden"
+    if overridden.any():
+        human = load_human_decisions(state_dir)
+        ai_call = {} if human is None else {
+            (int(r.id_a), int(r.id_b)): r.ai_decision for r in human.itertuples()
+        }
+        keys = list(zip(ai.loc[overridden, "id_a"].astype(int), ai.loc[overridden, "id_b"].astype(int)))
+        ai.loc[overridden, "decision"] = [ai_call.get(k, "") for k in keys]
+        ai = ai[ai["decision"] != ""]  # original AI call unrecoverable; don't archive a guess
+    ai = ai.drop(columns="method")
+
+    path = os.path.join(state_dir, AI_DECISIONS_FILE)
+    if os.path.exists(path):
+        existing = _read_ai_decisions(path)
+        ai = pd.concat([existing, ai]).drop_duplicates(["id_a", "id_b"], keep="last")
+
+    ai = ai.sort_values(["id_a", "id_b"]).reset_index(drop=True)
+    tmp = f"{path}.tmp"
+    ai.to_csv(tmp, index=False, compression={"method": "gzip", "mtime": 0})
+    with open(tmp, "rb") as f:
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+    return len(ai)
+
+
+def restore_from_archive(state: str, force: bool = False) -> pd.DataFrame:
+    """Rebuild adjudicated_pairs.csv from scored_pairs.csv + ai_decisions.csv.gz
+    without calling the API — for picking a state up on another machine.
+
+    Run stages 1-3 first (preprocess, block, score) to regenerate
+    scored_pairs.csv from data/. Archived AI decisions are attached by pair;
+    auto-match/auto-reject tiers, edge cases, triage, and the human review
+    queue are then recomputed exactly as on a normal run.
+
+    Embedding scores can differ in the last decimal places across machines. A
+    pair that drifts into the auto tiers takes the auto decision; an AI-range
+    pair with no archived decision is left 'pending' and the integrity check
+    reports it, so `--resume` adjudicates just those.
+    """
+    state_dir = os.path.join(config.WORKING_DIR, state)
+    scored_path = os.path.join(state_dir, "scored_pairs.csv")
+    archive_path = os.path.join(state_dir, AI_DECISIONS_FILE)
+    output_path = os.path.join(state_dir, "adjudicated_pairs.csv")
+
+    if not os.path.exists(scored_path):
+        raise SystemExit(f"{scored_path} not found. Run preprocess.py, block.py, and score.py for {state} first.")
+    if not os.path.exists(archive_path):
+        raise SystemExit(f"{archive_path} not found — nothing to restore from.")
+    if os.path.exists(output_path) and not force:
+        raise SystemExit(f"{output_path} already exists. Use --force to replace it with the restored version.")
+
+    scored = pd.read_csv(scored_path, low_memory=False)
+    archive = _read_ai_decisions(archive_path).rename(columns={"composite_score": "archived_score"})
+    merged = scored.merge(archive, on=["id_a", "id_b"], how="left", validate="one_to_one")
+
+    has_ai = merged["decision"].notna()
+    merged["decision"] = merged["decision"].fillna("")
+    merged["ai_rationale"] = merged["ai_rationale"].fillna("")
+    merged["method"] = ""
+    merged.loc[has_ai, "method"] = "ai_adjudication"
+    merged["needs_human_review"] = False
+    merged["human_review_reason"] = ""
+
+    unmatched = len(archive) - int(has_ai.sum())
+    drift = int((has_ai & ((merged["composite_score"] - merged["archived_score"]).abs() > 1e-9)).sum())
+    merged = merged.drop(columns="archived_score")
+
+    logger.info(f"Restore {state}: attached {int(has_ai.sum()):,} of {len(archive):,} archived AI decisions "
+                f"to {len(merged):,} scored pairs")
+    if unmatched:
+        logger.warning(f"  {unmatched:,} archived decisions match no regenerated pair "
+                       f"(candidate set differs from when they were made)")
+    if drift:
+        logger.warning(f"  {drift:,} pairs scored differently than when adjudicated "
+                       f"(embedding drift); tiers follow the new scores")
+
+    _atomic_to_csv(merged, output_path)
+    # resume=True keeps attached decisions; skip_ai=True guarantees no API calls.
+    return adjudicate_state(state, skip_ai=True, resume=True)
+
+
 def check_integrity(scored_df: pd.DataFrame, state_dir: str) -> list[str]:
     """Check a finished adjudication for silent incompleteness.
 
@@ -541,6 +657,11 @@ def adjudicate_state(state: str, skip_ai: bool = False,
     # Save final results
     _atomic_to_csv(scored_df, output_path)
 
+    # Archive the AI's decisions separately: they're the only part of this file
+    # that can't be regenerated (and won't be at all once the model is retired).
+    n_archived = export_ai_decisions(scored_df, state_dir)
+    logger.info(f"Archived {n_archived:,} AI decisions to {AI_DECISIONS_FILE}")
+
     # Save edge cases separately
     edge_cases = scored_df[scored_df["edge_case"] != ""]
     if not edge_cases.empty:
@@ -603,11 +724,16 @@ if __name__ == "__main__":
     import sys
 
     # Usage: GEMINI_API_KEY=... python3 adjudicate.py WY [--skip-ai] [--resume]
+    #        python3 adjudicate.py WY --restore [--force]   (no API calls)
     state = sys.argv[1] if len(sys.argv) > 1 else "WY"
     skip_ai = "--skip-ai" in sys.argv
     resume = "--resume" in sys.argv
+    restore = "--restore" in sys.argv
 
-    result_df = adjudicate_state(state, skip_ai=skip_ai, resume=resume)
+    if restore:
+        result_df = restore_from_archive(state, force="--force" in sys.argv)
+    else:
+        result_df = adjudicate_state(state, skip_ai=skip_ai, resume=resume)
     print(f"\nAdjudicated {len(result_df)} pairs for {state}")
     print(f"\nDecision summary:")
     print(result_df["decision"].value_counts().to_string())
@@ -622,7 +748,7 @@ if __name__ == "__main__":
 
     # Exit non-zero when the run finished but the data is incomplete, so the
     # dashboard job (and any shell/CI caller) reports failure instead of success.
-    if not skip_ai:
+    if restore or not skip_ai:
         problems = check_integrity(
             result_df, os.path.join(config.WORKING_DIR, state)
         )

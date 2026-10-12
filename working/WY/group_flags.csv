@@ -1,0 +1,54 @@
+venue_id,member_ids,group_size,needs_review,confidence,rationale,flag_type
+WY-00002,"[1750, 94028]",2,False,0.9,These records represent the same location described by a consistent landmark.,uncertain_group
+WY-00003,"[1751, 102281]",2,False,0.95,"The records share the same phone number and purpose, indicating a consistent community service entity.",uncertain_group
+WY-00005,"[1753, 94030, 102282]",3,False,0.95,The records share consistent phone numbers and business descriptions over time.,uncertain_group
+WY-00006,"[2551, 108281]",2,False,1.0,"The records are identical in name, address, and phone number.",uncertain_group
+WY-00007,"[2552, 108280]",2,False,0.9,"The name change from Coffee Shamanthe to The Coffee Shaman is a minor, plausible variation.",uncertain_group
+WY-00008,"[3290, 84066, 89758, 100205, 108284, 114184]",6,False,1.0,"The records are consistent in name, address, and phone number.",uncertain_group
+WY-00009,"[3922, 84071, 89760, 98273, 108285, 114185, 123466, 130081, 136212, 142010]",10,False,0.95,The name change from Resort to Ranch is a common variation for the same property.,uncertain_group
+WY-00010,"[6089, 84074, 89763, 95752, 108286, 114187, 117921, 130084, 131283, 142014]",10,False,0.9,"The records are consistent in name, address, and phone number, with minor variations in operating hours.",uncertain_group
+WY-00011,"[13839, 19772]",2,False,1.0,The records are identical in name and address.,uncertain_group
+WY-00012,"[13840, 28552, 33946, 51071, 53492, 59064, 73455, 73456, 73457]",9,False,1.0,The records are consistent in name and address.,uncertain_group
+WY-00013,"[13843, 19776, 51069, 73452, 73453, 76455]",6,False,0.9,The address shifts (1800 to 1600 to 1700) are minor and likely represent the same large hotel complex on Lincoln Way.,uncertain_group
+WY-00014,"[13844, 19777, 28542, 33955, 38996, 41957, 53477, 59052]",8,False,1.0,The variations in the name are clearly OCR errors or minor spelling inconsistencies for the same venue.,uncertain_group
+WY-00015,"[13847, 19780, 27415, 33074, 38020, 43188, 51068, 52478, 57942, 73445, 73446]",11,False,1.0,"The venue is consistently identified as the Cowboy Bar in Jackson, with minor address formatting variations.",uncertain_group
+WY-00016,"[13848, 19781, 28551, 33948, 39008, 44050, 53490, 59066]",8,False,1.0,The records are consistent in name and address for a hotel bar.,uncertain_group
+WY-00017,"[13849, 19782, 26153, 31972, 36865, 42127, 51300, 56702]",8,False,1.0,The name change from 7th Keg to Seventh Keg is a minor stylistic variation.,uncertain_group
+WY-00018,"[13851, 19784]",2,False,1.0,The records are consistent for a hotel bar in Rock Springs.,uncertain_group
+WY-00019,"[13852, 19785]",2,False,1.0,The records are consistent for a venue in Rock Springs.,uncertain_group
+WY-00021,"[29714, 40073, 54569, 60203]",4,False,1.0,The records are consistent for a venue in Cheyenne.,uncertain_group
+WY-00022,"[32590, 37493, 42730, 51066, 51937, 57368, 73441, 73442]",8,False,1.0,The records are consistent for a venue in Laramie.,uncertain_group
+WY-00024,"[34916, 44985, 51073, 73462]",4,False,1.0,The records are consistent for a venue in Cheyenne.,uncertain_group
+WY-00025,"[35272, 40461, 45320, 51075, 54968, 73466]",6,False,1.0,The records consistently refer to the same venue with minor variations in address formatting.,uncertain_group
+WY-00026,"[36559, 46554, 51078, 73479, 73480, 73481]",6,False,1.0,The records consistently refer to the same venue with minor variations in address formatting.,uncertain_group
+WY-00027,"[39005, 44047]",2,False,0.9,The address difference between 'T' St and 'V' St is likely a minor transcription error or street naming inconsistency.,uncertain_group
+WY-00029,"[51070, 73454]",2,False,1.0,The records refer to the same venue with a minor spelling variation in the name.,uncertain_group
+WY-00030,"[51074, 73463, 73464, 73465]",4,False,1.0,The records consistently refer to the same venue.,uncertain_group
+WY-00032,"[73447, 73448]",2,False,1.0,The records consistently refer to the same venue.,uncertain_group
+WY-00033,"[73449, 73450]",2,False,1.0,The records consistently refer to the same venue.,uncertain_group
+WY-00035,"[73461, 76457, 168626, 173417, 173418]",5,False,1.0,The records consistently refer to the same venue.,uncertain_group
+WY-00037,"[179111, 181736, 181737, 181738]",4,False,1.0,The records consistently refer to the same venue.,uncertain_group
+WY-00038,"[73470, 73471, 76459, 168627, 173419, 173420, 175209, 177912, 177913, 179112, 181739, 181740, 181741]",13,False,1.0,The records consistently refer to the same venue.,uncertain_group
+WY-00039,"[73472, 73473, 76461]",3,False,1.0,The records represent the same venue with minor formatting variations in the address.,uncertain_group
+WY-00040,"[76460, 168628, 173421, 173422]",4,False,1.0,The records are consistent across all years.,uncertain_group
+WY-00041,"[84061, 91876, 116491, 130074, 136208, 142004, 147546, 153316, 159462, 165762]",10,True,0.8,"The group lists a Cheyenne city heading but provides Laramie PO boxes and phone numbers, suggesting a potential mismatch in location or entity type.",uncertain_group
+WY-00043,"[84063, 89757, 96415, 108283, 114183, 118460, 130075, 131753, 142005]",9,False,0.9,The records represent the same venue with minor variations in phone number transcription and address formatting.,uncertain_group
+WY-00044,"[84067, 116494, 130079]",3,True,0.9,"The venue is listed under Jackson, but the description explicitly states it is in Driggs, Idaho, which is a different state and city.",uncertain_group
+WY-00045,"[84068, 116495]",2,False,1.0,The records are consistent.,uncertain_group
+WY-00046,"[84069, 116496]",2,False,1.0,The name change is a minor typo/OCR error.,uncertain_group
+WY-00047,"[84070, 89759, 94992, 117208, 130080, 136213, 142009]",7,False,0.9,"The initial name 'Redwood' is likely a typo for 'Redmond', which is consistent across the remaining records.",uncertain_group
+WY-00048,"[84072, 89761, 114186]",3,True,0.9,"The venue is listed under Jackson, but the description explicitly states it is in Driggs, Idaho, which is a different state and city.",uncertain_group
+WY-00049,"[84073, 89762, 95133, 117331, 130083, 130788, 142012]",7,False,1.0,The name variation is a minor abbreviation.,uncertain_group
+WY-00050,"[89764, 97858, 119772, 130085]",4,False,1.0,Minor spelling variation and consistent phone number/address confirm this is the same B&B.,uncertain_group
+WY-00055,"[94031, 102283]",2,False,1.0,Consistent phone number and description indicate the same rental property.,uncertain_group
+WY-00056,"[94032, 102284]",2,False,1.0,Consistent phone number and description confirm this is the same B&B.,uncertain_group
+WY-00057,"[108282, 114182]",2,False,1.0,"Consistent name, address, and phone number confirm this is the same venue.",uncertain_group
+WY-00058,"[117090, 130082, 130588, 142011]",4,False,1.0,Minor phone number transcription variation and consistent address confirm this is the same venue.,uncertain_group
+WY-00059,"[119614, 130073, 132734, 142003, 159461, 165761]",6,False,1.0,"Consistent name, address, and phone number confirm this is the same venue.",uncertain_group
+WY-00062,"[123685, 147551, 153321]",3,False,0.9,"These are organizational listings for the same group, despite minor variations in name and phone numbers over time.",uncertain_group
+WY-00063,"[130078, 136211, 142008]",3,False,0.9,"These are organizational listings for the same group, consistent with the provided PO Box.",uncertain_group
+WY-00064,"[147550, 153320, 159465]",3,False,1.0,"Consistent name, address, and phone number confirm this is the same venue.",uncertain_group
+WY-00066,"[168625, 173415, 173416]",3,False,1.0,"Consistent name, address, and description confirm this is the same venue.",uncertain_group
+WY-00067,"[175207, 177909]",2,False,1.0,The records represent the same venue name and location across consecutive years.,uncertain_group
+WY-00068,"[175208, 177910, 177911]",3,False,1.0,The records represent the same venue name and location across consecutive years.,uncertain_group
+WY-00069,"[73468, 73469, 76458]",3,False,1.0,"The records represent the same venue name and location, with consistent descriptions linking it to the Plains Hotel.",uncertain_group

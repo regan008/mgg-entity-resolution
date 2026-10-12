@@ -30,8 +30,8 @@ Hand deletions are **durable**: they append to `working/{state}/excluded_records
 2. block.py         →  Generate candidate pairs via geohash + name-similarity blocking
 3. score.py         →  Compute embedding, Jaro-Winkler, and address overlap scores
 4. adjudicate.py    →  Auto-match (≥0.75), auto-reject (<0.50), Gemini adjudicates the middle range
-5. (pair review)    →  Human pair review in the dashboard; review.py merges decisions into adjudicated_pairs.csv
-6. consolidate.py   →  Union-Find transitive closure into venue groups
+5. (pair review)    →  Human pair review in the dashboard → human_review_decisions.csv
+6. consolidate.py   →  Applies human pair decisions, then Union-Find transitive closure into venue groups
 7. assign_ids.py    →  Assign draft venue IDs (WY-00001)
 8. group_review.py  →  OPTIONAL: Gemini flags questionable groups → group_flags.csv (advisory only)
 9. (venue review)   →  Human group review in the dashboard, then Approve
@@ -78,7 +78,8 @@ template/Python edits require a dashboard restart to take effect (debug is off).
 | `results/` | Snapshot of `venue_assignments` — **re-run `python3 db_snapshot.py export` after every `assign_ids.py --commit`** |
 | `db_snapshot.py` | `export` (db → CSVs), `build` (CSVs → db), `verify` (rebuild in a temp dir and compare every value + type) |
 | `PIPELINE_DOCUMENTATION.md` | Full reference with function-level `file:line` links |
-| `working/{state}/` | Intermediate CSVs per state |
+| `working/{state}/` | Per-state files. Only decisions are versioned (whitelist in `.gitignore`): human review/edit files, `ai_decisions.csv.gz`, `group_flags.csv`, `consolidated_groups.csv`. Intermediates are regenerated; see *Another machine* below |
+| `working/{state}/ai_decisions.csv.gz` | Archive of every Gemini pair decision — written by every `adjudicate.py` run, merged not replaced. The irreplaceable part of `adjudicated_pairs.csv` |
 
 ## Important Design Decisions
 
@@ -99,6 +100,10 @@ template/Python edits require a dashboard restart to take effect (debug is off).
 8. **Cruising area exclusion** (`amenity_id=90`): Under the brick-and-mortar scope, cruising areas are **dropped outright** in `preprocess.py:194` — they never reach blocking, scoring, or adjudication. Records missing the tag in the source are caught by hand in venue review and recorded in `excluded_records.csv` (see *Cruising areas — two layers* above).
 
    _Superseded_: through April 2026 cruising areas were kept in the pipeline and merely *isolated* at the blocking stage (`block.py:cruising_compatible()`), so they were only ever compared against other cruising areas or NA-title records. That function no longer exists; `block.py` just notes the exclusion happened upstream. The DE-era figures for that approach (2,179 mixed pairs dropped, 127 NA-title↔cruising matches preserved) describe the old design and are kept only as history.
+
+9. **Human pair decisions are applied at consolidation.** `consolidate.py` overlays `human_review_decisions.csv` in memory on every run (via `review.apply_human_decisions`), so `adjudicated_pairs.csv` stays the pure AI/auto record. Before Oct 2026 nothing applied them unless `review.py` was run by hand, which it never was: WY's 12 rejections were redone manually in venue review, and SC was committed with 2 venues contradicting the reviewer's pair decisions ("Downtown" merged into Dudley's; Territorial Social Club / Midge's Lounge / Campground as one venue).
+
+10. **Another machine**: `db_snapshot.py build`, then for each state `preprocess.py`, `block.py`, `score.py`, and `adjudicate.py STATE --restore` (attaches archived AI decisions, no API calls). Never re-run `consolidate.py`/`assign_ids.py` for a state in venue review — the committed draft holds merges/splits those scripts would overwrite.
 
 ## Database Schema (key tables)
 

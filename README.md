@@ -96,6 +96,27 @@ The SQLite database (`mgg.db`, 73 MB) is not kept in git. Its contents are versi
 
 `db_snapshot.py build` reconstructs the database from these files. `db_snapshot.py verify` confirms the snapshot reproduces the live database exactly, value for value. After committing a state, run `db_snapshot.py export` to update `results/`.
 
-Intermediate working files are written to `working/{STATE}/` and are not version-controlled.
+### What's versioned in `working/{STATE}/`
+
+Only what can't be regenerated: human judgments (`human_review_decisions.csv`, `venue_edit_log.csv`, `excluded_records.csv`, the venue-assignment draft and approved snapshot), Gemini output (`ai_decisions.csv.gz`, `group_flags.csv`), and `consolidated_groups.csv`. The large intermediates (preprocessed records, candidate/scored/adjudicated pairs) are gitignored and rebuilt on demand. `.gitignore` uses a whitelist, so any new file type is excluded until explicitly allowed.
+
+### Picking up on another machine
+
+```bash
+git clone git@github.com:regan008/mgg-entity-resolution.git && cd mgg-entity-resolution
+python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+python3 db_snapshot.py build
+echo "GEMINI_API_KEY=..." > .env
+
+# For each state you'll work on, regenerate stages 1-3, then restore the AI decisions:
+python3 preprocess.py NY && python3 block.py NY && python3 score.py NY
+python3 adjudicate.py NY --restore      # no API calls; rebuilds adjudicated_pairs.csv + review queue
+```
+
+`--restore` attaches the archived Gemini decisions to the regenerated pairs and recomputes everything else. If any AI-range pair has no archived decision (an unfinished run, or a score that drifted across a threshold on different hardware), it says so and exits 1, and `adjudicate.py NY --resume` adjudicates just those.
+
+From there, carry on where you left off. **Don't re-run `consolidate.py` or `assign_ids.py` for a state that's already in venue review.** Its committed draft holds your merges and splits, which those scripts would overwrite.
+
+Before switching machines, commit and push `working/` (and run `db_snapshot.py export` if you committed a state). Avoid working on the same state on two machines at once.
 
 
