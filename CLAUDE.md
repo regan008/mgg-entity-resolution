@@ -82,7 +82,7 @@ template/Python edits require a dashboard restart to take effect (debug is off).
 
 ## Important Design Decisions
 
-1. **Adaptive weight redistribution**: When addresses are missing, the 25% address weight is redistributed to embedding (66.7%) and Jaro-Winkler (33.3%), maintaining their 2:1 ratio. See `wy_adaptive_scoring_decision.md`.
+1. **Adaptive weight redistribution**: When addresses are missing, the 25% address weight is redistributed to embedding (66.7%) and Jaro-Winkler (33.3%), maintaining their 2:1 ratio. See `wy_adaptive_scoring_decision.md` (in git history; see *Decision Documentation*).
 
 2. **Signal disagreement detection**: Pairs with high embedding similarity but low JW name match (e.g., "Cowboy Bar" vs "Rancher Bar") are routed to human review. Thresholds: emb ≥ 0.60, JW < 0.55, addr < 0.50.
 
@@ -109,20 +109,40 @@ template/Python edits require a dashboard restart to take effect (debug is off).
 
 ## Dependencies
 
+See `requirements.txt`:
+
 ```
-pandas, numpy, sentence-transformers, torch, jellyfish, pygeohash, anthropic, flask
+pandas, numpy, sentence-transformers, torch, jellyfish, pygeohash,
+google-genai, google-api-core, python-dotenv, flask
 ```
 
-## Running the AI Adjudication Stage
+## Running the AI Stages
 
-The adjudication stage calls the Anthropic API. Set the API key before running:
+`adjudicate.py` and `group_review.py` call **Google Gemini** (`config.GEMINI_MODEL`, currently Gemini Flash Lite). They read the key from `GEMINI_API_KEY` (or `GOOGLE_API_KEY`), loading it from a gitignored `.env` at the repo root if present:
+
 ```bash
-ANTHROPIC_API_KEY=sk-... python3 adjudicate.py WY
+echo "GEMINI_API_KEY=..." > .env
+python3 adjudicate.py NY
 ```
+
+Every call's token usage and cost is appended to `api_calls.csv`.
+
+Large states take hours. Things to know:
+- **Resume** with `python3 adjudicate.py NY --resume`. Progress is written atomically after every batch of 20 pairs, so an interruption loses at most one batch.
+- **The run checks its own completeness.** It exits 1 with an `ADJUDICATION INCOMPLETE` banner if any AI-range pair has no decision (API down, quota exhausted) or the row count doesn't match `scored_pairs.csv`. Don't run `consolidate.py` until it reports `Integrity check passed`.
+- **Closing the laptop suspends the run**, and losing the network mid-run marks pairs `ai_no_response`. Both are recoverable with `--resume`. Use `caffeinate -i` to prevent idle sleep.
+- **Don't use `--skip-ai` as a dry run.** It writes `adjudicated_pairs.csv`, marking unadjudicated AI-range pairs `pending`.
+- Runs launched from the dashboard are subprocesses of the dashboard, not your terminal. Restarting the dashboard loses track of them.
 
 ## Decision Documentation
 
-| File | Content |
+Current decisions are recorded in `project_history.md`. The calibration notes below supported the original thresholds (0.75 auto-match, adaptive weights, 0.90 AI auto-accept). They were removed in the June 2026 reset (`18a63ae`) but remain in git history. Recover one with:
+
+```bash
+git show 18a63ae^:wy_adaptive_scoring_decision.md
+```
+
+| File (in history at `18a63ae^`) | Content |
 |------|---------|
 | `threshold_calibration_notes.md` | Initial WY threshold observations |
 | `wy_adaptive_scoring_decision.md` | Why adaptive weights were adopted |
