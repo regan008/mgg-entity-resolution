@@ -16,3 +16,7 @@ dashboard-design-docs/
 # SQLite scratch (live WAL files)
 *.db-shm
 *.db-wal
+
+# SQLite database — too large for git and not diffable. Versioned as gzipped
+# CSVs in data/ and results/; rebuild with `python3 db_snapshot.py build`.
+mgg.db

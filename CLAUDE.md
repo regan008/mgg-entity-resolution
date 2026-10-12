@@ -36,6 +36,7 @@ Hand deletions are **durable**: they append to `working/{state}/excluded_records
 8. group_review.py  →  OPTIONAL: Gemini flags questionable groups → group_flags.csv (advisory only)
 9. (venue review)   →  Human group review in the dashboard, then Approve
 10. assign_ids.py --commit  →  Write approved assignments to mgg.db
+11. db_snapshot.py export   →  Refresh results/ so the commit is captured in git
 ```
 
 Run any batch stage: `python3 {script}.py {STATE}` (e.g., `python3 preprocess.py WY`).
@@ -72,7 +73,10 @@ template/Python edits require a dashboard restart to take effect (debug is off).
 | `dashboard/` | Flask control panel (port 5050): run stages, pair review, venue review, costs |
 | `working/{state}/venue_edit_log.csv` | Every human venue-review action (split/merge/reassign/delete/review/approve) |
 | `working/{state}/excluded_records.csv` | Records permanently excluded by a reviewer (mostly untagged cruising areas); honored by `assign_ids.py` |
-| `mgg.db` | SQLite database (do not commit to git — too large) |
+| `mgg.db` | SQLite database — gitignored. Rebuild from `data/` + `results/` with `python3 db_snapshot.py build` |
+| `data/` | Lossless gzipped-CSV snapshot of the MGG source tables (`schema.sql`, `manifest.json` with checksums). See `data/README.md` |
+| `results/` | Snapshot of `venue_assignments` — **re-run `python3 db_snapshot.py export` after every `assign_ids.py --commit`** |
+| `db_snapshot.py` | `export` (db → CSVs), `build` (CSVs → db), `verify` (rebuild in a temp dir and compare every value + type) |
 | `PIPELINE_DOCUMENTATION.md` | Full reference with function-level `file:line` links |
 | `working/{state}/` | Intermediate CSVs per state |
 

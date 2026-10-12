@@ -1,0 +1,81 @@
+{
+  "unique_locations": {
+    "rows": 42270,
+    "columns": [
+      "id",
+      "latitude",
+      "longitude",
+      "city",
+      "state",
+      "address_precision",
+      "created_at"
+    ],
+    "sha256": "d9c034772717c54b33fa30297dbae41b75b41acd871d1d0e5058b1ea7c8ce928"
+  },
+  "locations": {
+    "rows": 181741,
+    "columns": [
+      "id",
+      "unique_id",
+      "title",
+      "description",
+      "street_address",
+      "city",
+      "state",
+      "year",
+      "notes",
+      "full_address",
+      "latitude",
+      "longitude",
+      "geo_address",
+      "unclear_address",
+      "status",
+      "unique_location_id",
+      "created_at",
+      "updated_at"
+    ],
+    "sha256": "791dac49d9ae7e1338460f5ae28bbd22c1c110fb3035f7c383c3660b8162472d"
+  },
+  "amenity_features": {
+    "rows": 75,
+    "columns": [
+      "id",
+      "name",
+      "description",
+      "created_at",
+      "short_description",
+      "descriptive_name"
+    ],
+    "sha256": "359ac3b950576ea4e0df35f5445f0bb16e3abb18a1912440243e0e294e262937"
+  },
+  "location_types": {
+    "rows": 70,
+    "columns": [
+      "id",
+      "name",
+      "description",
+      "created_at"
+    ],
+    "sha256": "c5874a14cb1b51e78beb1e259494c6875e028c52b0bf029e5e78384843cbb8e2"
+  },
+  "location_amenity_assignments": {
+    "rows": 287357,
+    "columns": [
+      "id",
+      "location_id",
+      "amenity_id",
+      "created_at"
+    ],
+    "sha256": "b943bc9c1fd5177ea5a895ea69403a2e0c0ea4fcc615f777c5523971f73870b2"
+  },
+  "location_type_assignments": {
+    "rows": 191826,
+    "columns": [
+      "id",
+      "location_id",
+      "type_id",
+      "created_at"
+    ],
+    "sha256": "6943de24d4415f3d7a03bd5053db77ecc87a07d2d42ee2fe15835d1a6803b67e"
+  }
+}

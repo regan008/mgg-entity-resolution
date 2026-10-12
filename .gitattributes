@@ -1,0 +1,2 @@
+# Snapshot files are checksummed in manifest.json; never let git rewrite them.
+*.csv.gz binary

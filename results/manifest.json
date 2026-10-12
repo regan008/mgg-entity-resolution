@@ -1,0 +1,15 @@
+{
+  "venue_assignments": {
+    "rows": 1197,
+    "columns": [
+      "location_id",
+      "venue_id",
+      "group_size",
+      "confidence_score",
+      "resolution_method",
+      "flags",
+      "date_assigned"
+    ],
+    "sha256": "b88f04cb986ae0aab4082cce6a4c3ac47df7d40b88fa9ad893c0189e54ce4ca6"
+  }
+}

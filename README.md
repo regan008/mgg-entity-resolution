@@ -82,10 +82,20 @@ See `PIPELINE_DOCUMENTATION.md` for full stage-by-stage reference with function-
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+python3 db_snapshot.py build    # rebuild mgg.db from data/ + results/
 ```
 
 **Dependencies:** `pandas`, `numpy`, `sentence-transformers`, `torch`, `jellyfish`, `pygeohash`, `google-genai`, `google-api-core`, `python-dotenv`, `flask`
 
-The database file `mgg.db` is not committed to this repository (too large). Intermediate working files are written to `working/{STATE}/` and are also excluded from version control.
+### Data
+
+The SQLite database (`mgg.db`, 73 MB) is not kept in git. Its contents are versioned as gzipped CSVs (13 MB total):
+
+- **[`data/`](data/README.md)**: the MGG source tables the pipeline reads (181,741 listings plus amenity and venue-type tags)
+- **[`results/`](results/README.md)**: the venue IDs the pipeline has committed
+
+`db_snapshot.py build` reconstructs the database from these files. `db_snapshot.py verify` confirms the snapshot reproduces the live database exactly, value for value. After committing a state, run `db_snapshot.py export` to update `results/`.
+
+Intermediate working files are written to `working/{STATE}/` and are not version-controlled.
 
 
