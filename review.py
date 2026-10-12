@@ -1,9 +1,14 @@
 """
-review.py — Merge human review decisions into adjudicated_pairs.csv.
+review.py — Apply human pair-review decisions to adjudicated pairs.
 
-Reads human_review_decisions.csv and updates adjudicated_pairs.csv with
-finalized decisions, marking each as human_confirmed, human_overridden,
-or ai_accepted.
+The dashboard's pair review writes human_review_decisions.csv. This module
+overlays those decisions on adjudicated_pairs.csv, marking each reviewed pair
+human_confirmed, human_overridden, or ai_accepted (skip).
+
+consolidate.py calls apply_human_decisions() in memory on every run, so human
+decisions always reach venue grouping without a separate step. Running this
+script directly is optional: it writes the overlay into adjudicated_pairs.csv
+(useful for inspecting the merged result) and records AI-accuracy stats.
 
 Usage:
     python review.py WY
@@ -16,87 +21,105 @@ import pandas as pd
 
 import config
 
+# Methods that mark a pair's decision as having come from the AI, possibly with
+# a human verdict layered on top by apply_human_decisions().
+AI_DECIDED_METHODS = {"ai_adjudication", "ai_accepted", "human_confirmed", "human_overridden"}
+
+
+def load_human_decisions(working_dir: str) -> pd.DataFrame | None:
+    """human_review_decisions.csv for a state, or None if no pairs were reviewed."""
+    path = os.path.join(working_dir, "human_review_decisions.csv")
+    if not os.path.exists(path):
+        return None
+    try:
+        df = pd.read_csv(path)
+    except pd.errors.EmptyDataError:
+        return None
+    return df if not df.empty else None
+
+
+def apply_human_decisions(adj_df: pd.DataFrame, decisions_df: pd.DataFrame):
+    """Overlay human verdicts on adjudicated pairs. Returns (new_df, counts).
+
+    Pure: does not modify adj_df or touch disk. Idempotent: applying the same
+    decisions to an already-overlaid frame yields the same result, because a
+    human verdict replaces `decision` and the method label is derived from the
+    human verdict vs the AI's original call (taken from decisions_df, not from
+    the possibly-overwritten frame).
+    """
+    out = adj_df.copy()
+    counts = {"confirmed": 0, "overridden": 0, "skipped": 0, "not_found": 0}
+    index = {(int(a), int(b)): i for i, (a, b) in enumerate(zip(out["id_a"], out["id_b"]))}
+
+    for _, row in decisions_df.iterrows():
+        key = (int(row["id_a"]), int(row["id_b"]))
+        pos = index.get(key)
+        if pos is None:
+            counts["not_found"] += 1
+            continue
+        idx = out.index[pos]
+        human_dec = row["human_decision"]
+        ai_dec = row["ai_decision"]
+
+        if human_dec == "skip":
+            out.at[idx, "decision"] = ai_dec
+            out.at[idx, "method"] = "ai_accepted"
+            counts["skipped"] += 1
+        elif human_dec == ai_dec:
+            out.at[idx, "decision"] = human_dec
+            out.at[idx, "method"] = "human_confirmed"
+            counts["confirmed"] += 1
+        else:
+            out.at[idx, "decision"] = human_dec
+            out.at[idx, "method"] = "human_overridden"
+            counts["overridden"] += 1
+    return out, counts
+
+
+def record_review_stats(state: str, adj_df: pd.DataFrame, decisions_df: pd.DataFrame, counts: dict):
+    """Record human-review outcome and AI-accuracy metrics to pipeline_stats.csv."""
+    from pipeline_stats import StatsTracker
+    final_decisions = adj_df["decision"].value_counts().to_dict()
+    StatsTracker().record(state, "human_review", {
+        "confirmed": counts["confirmed"],
+        "overridden": counts["overridden"],
+        "skipped": counts["skipped"],
+        "final_matches": final_decisions.get("match", 0),
+        "final_rejects": final_decisions.get("reject", 0),
+        **_compute_ai_accuracy(decisions_df),
+    })
+
 
 def merge_decisions(state: str):
     working_dir = os.path.join(config.WORKING_DIR, state)
     adj_path = os.path.join(working_dir, "adjudicated_pairs.csv")
-    decisions_path = os.path.join(working_dir, "human_review_decisions.csv")
 
-    if not os.path.exists(decisions_path):
-        print(f"No human review decisions found at {decisions_path}")
+    decisions_df = load_human_decisions(working_dir)
+    if decisions_df is None:
+        print(f"No human review decisions found in {working_dir}")
         sys.exit(1)
 
-    adj_df = pd.read_csv(adj_path)
-    decisions_df = pd.read_csv(decisions_path)
-
+    adj_df = pd.read_csv(adj_path, low_memory=False)
     print(f"State={state}: {len(adj_df)} total pairs, {len(decisions_df)} human decisions")
 
-    # Build lookup from human decisions
-    decision_map = {}
-    for _, row in decisions_df.iterrows():
-        key = (int(row["id_a"]), int(row["id_b"]))
-        decision_map[key] = {
-            "human_decision": row["human_decision"],
-            "human_notes": row.get("human_notes", ""),
-        }
+    adj_df, counts = apply_human_decisions(adj_df, decisions_df)
 
-    # Track stats
-    confirmed = 0
-    overridden = 0
-    accepted_skip = 0
-
-    for idx, row in adj_df.iterrows():
-        key = (int(row["id_a"]), int(row["id_b"]))
-        if key not in decision_map:
-            continue
-
-        human = decision_map[key]
-        human_dec = human["human_decision"]
-        ai_dec = row["decision"]
-
-        if human_dec == "skip":
-            # Accept the AI's original decision
-            adj_df.at[idx, "method"] = "ai_accepted"
-            accepted_skip += 1
-        elif human_dec == ai_dec:
-            # Human confirmed the AI's call
-            adj_df.at[idx, "method"] = "human_confirmed"
-            confirmed += 1
-        else:
-            # Human overrode the AI
-            adj_df.at[idx, "decision"] = human_dec
-            adj_df.at[idx, "method"] = "human_overridden"
-            overridden += 1
-
-    # Save updated adjudicated pairs
-    adj_df.to_csv(adj_path, index=False)
+    from adjudicate import _atomic_to_csv
+    _atomic_to_csv(adj_df, adj_path)
 
     print(f"\nMerge complete:")
-    print(f"  Human confirmed AI:  {confirmed}")
-    print(f"  Human overrode AI:   {overridden}")
-    print(f"  Skipped (AI kept):   {accepted_skip}")
+    print(f"  Human confirmed AI:  {counts['confirmed']}")
+    print(f"  Human overrode AI:   {counts['overridden']}")
+    print(f"  Skipped (AI kept):   {counts['skipped']}")
+    if counts["not_found"]:
+        print(f"  WARNING: {counts['not_found']} decision(s) match no adjudicated pair")
     print(f"\nDecision summary:")
     print(adj_df["decision"].value_counts().to_string())
     print(f"\nMethod summary:")
     print(adj_df["method"].value_counts().to_string())
     print(f"\nSaved to {adj_path}")
 
-    # Record pipeline stats (including AI accuracy metrics)
-    from pipeline_stats import StatsTracker
-    final_decisions = adj_df["decision"].value_counts().to_dict()
-
-    # AI accuracy: compute from human_review_decisions.csv
-    # (which has both ai_decision and human_decision side by side)
-    ai_accuracy_stats = _compute_ai_accuracy(decisions_df)
-
-    StatsTracker().record(state, "human_review", {
-        "confirmed": confirmed,
-        "overridden": overridden,
-        "skipped": accepted_skip,
-        "final_matches": final_decisions.get("match", 0),
-        "final_rejects": final_decisions.get("reject", 0),
-        **ai_accuracy_stats,
-    })
+    record_review_stats(state, adj_df, decisions_df, counts)
 
 
 def _compute_ai_accuracy(decisions_df: pd.DataFrame) -> dict:

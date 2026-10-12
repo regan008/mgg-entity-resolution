@@ -72,9 +72,32 @@ def consolidate_state(state: str):
         print(f"No adjudicated pairs found at {adj_path}")
         sys.exit(1)
 
-    adj_df = pd.read_csv(adj_path)
+    adj_df = pd.read_csv(adj_path, low_memory=False)
     records_df = pd.read_csv(preprocessed_path)
     records = records_df.set_index("id")
+
+    # Apply human pair-review verdicts before grouping. The dashboard saves
+    # them to human_review_decisions.csv, and previously nothing merged them
+    # unless review.py was run by hand — so rejections made in pair review
+    # never reached consolidation (SC committed two venues that contradicted
+    # the reviewer's own pair decisions). Applying them here, in memory, makes
+    # that impossible to skip and leaves adjudicated_pairs.csv as the pure
+    # AI/auto record.
+    from review import apply_human_decisions, load_human_decisions, record_review_stats
+    decisions_df = load_human_decisions(working_dir)
+    if decisions_df is not None:
+        adj_df, review_counts = apply_human_decisions(adj_df, decisions_df)
+        print(f"Applied {len(decisions_df)} human pair decisions: "
+              f"{review_counts['confirmed']} confirmed, {review_counts['overridden']} overridden, "
+              f"{review_counts['skipped']} skipped")
+        if review_counts["not_found"]:
+            print(f"  WARNING: {review_counts['not_found']} human decision(s) match no adjudicated pair")
+        record_review_stats(state, adj_df, decisions_df, review_counts)
+    elif os.path.exists(os.path.join(working_dir, "human_review_pairs.csv")):
+        n_queue = len(pd.read_csv(os.path.join(working_dir, "human_review_pairs.csv")))
+        if n_queue:
+            print(f"WARNING: {n_queue} pairs await human review but no decisions exist yet. "
+                  f"Consolidating on AI decisions alone.")
 
     # Initialize Union-Find with ALL records (including singletons)
     uf = UnionFind()
